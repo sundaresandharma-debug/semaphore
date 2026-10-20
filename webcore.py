@@ -119,6 +119,8 @@ def run_unit_tests() -> dict:
 def run_demo(demo_id: str, params: dict, record: bool = True) -> dict:
     if demo_id not in DEMOS_BY_ID:
         raise ValueError(f"unknown demo {demo_id!r}")
+    allowed = {s["name"] for s in DEMOS_BY_ID[demo_id].PARAMS}
+    params = {k: v for k, v in params.items() if k in allowed}   # ignore unknown keys such as "log"
     log = EventLog()
     box: Dict[str, Any] = {}
 
