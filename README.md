@@ -66,9 +66,19 @@ my-semaphore-project/
 │   ├── catalog.py            GET  /api/catalog     list of demos and their settings
 │   ├── playground.py         POST /api/playground  replay wait()/signal() clicks on a real Semaphore
 │   ├── run.py                POST /api/run         run a demo (or the unit tests) to completion
-│   └── source.py             GET  /api/source      source-code viewer
+│   ├── source.py             GET  /api/source      source-code viewer
+│   ├── auth.py               /api/auth             sign up, sign in, sign out, password reset
+│   ├── account.py            /api/account          saved results, delete account
+│   └── errors.py             POST /api/errors      browser error reports (only with consent)
 ├── public/
-│   └── index.html            the browser interface (plain HTML, CSS and JavaScript, no libraries)
+│   ├── index.html            the browser interface (plain HTML, CSS and JavaScript, no libraries)
+│   ├── app.js, styles.css    its script and styles
+│   ├── privacy.html, terms.html, cookies.html, refunds.html, 404.html
+│   └── favicon.svg, theme.js
+├── accounts.py               Supabase Auth and database calls (keys stay on the server)
+├── supabase/schema.sql       table, row level security and limits for saved results
+├── docs/                     SETUP_ACCOUNTS.md (switching accounts on), LAUNCH_CHECKLIST.md
+├── .github/workflows/        db-backup.yml (nightly encrypted database backup)
 ├── src/
 │   ├── __init__.py
 │   ├── semaphore.py          Semaphore and BinarySemaphore (the heart of the project)
@@ -182,12 +192,19 @@ On each demonstration page: **Run** uses your settings, **Quick run** uses fast 
 
 The server listens on this computer only (`127.0.0.1`), accepts only JSON requests and serves only a fixed list of project files.
 
+### Accounts (optional)
+
+Accounts only let visitors keep results they choose to save; everything else works without
+them. They are switched off until four environment variables are set in Vercel. The steps are in
+[`docs/SETUP_ACCOUNTS.md`](docs/SETUP_ACCOUNTS.md), and the status of every launch item
+(privacy, consent, accessibility, security) is in [`docs/LAUNCH_CHECKLIST.md`](docs/LAUNCH_CHECKLIST.md).
+
 ### Deploy on Vercel
 
 The project is ready for Vercel as is (no build step, no packages):
 
 1. Push this folder to a GitHub repository.
-2. On vercel.com choose **Add New → Project**, import the repository and press **Deploy**.
+2. On vercel.com choose **Add New > Project**, import the repository and press **Deploy**.
    Leave the framework preset as **Other**; `vercel.json` already sets everything.
 
 Or from a terminal with the Vercel CLI: `npx vercel --prod`.

@@ -54,7 +54,7 @@ def demo_metadata() -> List[dict]:
 
 
 def source_files() -> List[str]:
-    files = ["README.md", "VIVA.md", "main.py", "webcore.py", "server.py"]
+    files = ["README.md", "VIVA.md", "main.py", "webcore.py", "accounts.py", "server.py"]
     for folder in ("src", "demos", "tests", "api"):
         files += sorted(f"{folder}/{p.name}" for p in (ROOT / folder).glob("*.py")
                         if p.name != "__init__.py" or folder == "src")
@@ -238,74 +238,180 @@ def playground(initial: Any, actions: Any) -> dict:
 
 
 # ----------------------------------------------------------------------
+# Rate limiting (per client, sliding window)
+# ----------------------------------------------------------------------
+import collections  # noqa: E402
+import hashlib  # noqa: E402
+import json  # noqa: E402
+import secrets  # noqa: E402
+
+import accounts  # noqa: E402
+
+LIMITS = {                     # requests per minute per client
+    "run": 15, "playground": 120, "auth": 10, "account": 40, "errors": 10, "default": 240,
+}
+_SALT = secrets.token_bytes(16)           # per process: raw IP addresses are never stored
+_HITS: Dict[Tuple[str, str], collections.deque] = {}
+_HITS_LOCK = threading.Lock()
+
+
+def client_key(ip: str) -> str:
+    return hashlib.sha256(_SALT + ip.encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def rate_limited(bucket: str, client: str) -> int:
+    """0 if allowed, else the number of seconds to wait."""
+    limit, now = LIMITS.get(bucket, LIMITS["default"]), time.monotonic()
+    with _HITS_LOCK:
+        hits = _HITS.setdefault((bucket, client), collections.deque())
+        while hits and now - hits[0] > 60:
+            hits.popleft()
+        if len(hits) >= limit:
+            return max(1, int(60 - (now - hits[0])) + 1)
+        hits.append(now)
+        if len(_HITS) > 20000:                # forget idle clients
+            for key in [k for k, d in _HITS.items() if not d or now - d[-1] > 60]:
+                del _HITS[key]
+        return 0
+
+
+def log_event(level: str, **fields: Any) -> str:
+    """One JSON line on stdout (Vercel shows it under the deployment's Logs)."""
+    ref = "E-" + secrets.token_hex(3).upper()
+    print(json.dumps({"level": level, "ref": ref, **fields}), flush=True)
+    return ref
+
+
+# ----------------------------------------------------------------------
 # One dispatcher for every endpoint
 # ----------------------------------------------------------------------
-def dispatch(method: str, path: str, query: Dict[str, List[str]], body: dict) -> Tuple[int, Any]:
+Result = Tuple[int, Any, List[str]]
+
+
+def dispatch(method: str, path: str, query: Dict[str, List[str]], body: dict,
+             cookies: Dict[str, str], client: str) -> Result:
     path = "/" + path.strip("/")
-    if path == "/api/catalog" and method == "GET":
-        return 200, demo_metadata()
-    if path == "/api/source" and method == "GET":
-        name = (query.get("file") or [""])[0]
-        if not name:
-            return 200, source_list()
-        if name not in source_files():
-            return 404, {"error": "unknown file"}
-        return 200, {"file": name, "text": (ROOT / name).read_text(encoding="utf-8")}
-    if path == "/api/run" and method == "POST":
-        if body.get("kind") == "tests":
-            return 200, run_unit_tests()
-        params = body.get("params") if isinstance(body.get("params"), dict) else {}
-        return 200, run_demo(str(body.get("demo")), params, record=bool(body.get("record", True)))
-    if path == "/api/playground" and method == "POST":
-        return 200, playground(body.get("initial", 1), body.get("actions"))
-    return 404, {"error": "not found"}
+    bucket = path.split("/")[2] if path.count("/") >= 2 else "default"
+    wait = rate_limited(bucket if method == "POST" else "default", client)   # strict limits only on actions
+    if wait:
+        return 429, {"error": f"Too many requests. Please wait {wait} seconds and try again.",
+                     "retry_after": wait}, [f"Retry-After: {wait}"]
+    out: List[str] = []
+    try:
+        if path == "/api/catalog" and method == "GET":
+            return 200, demo_metadata(), out
+        if path == "/api/source" and method == "GET":
+            name = (query.get("file") or [""])[0]
+            if not name:
+                return 200, source_list(), out
+            if name not in source_files():
+                return 404, {"error": "That file is not part of the project."}, out
+            return 200, {"file": name, "text": (ROOT / name).read_text(encoding="utf-8")}, out
+        if path == "/api/run" and method == "POST":
+            if body.get("kind") == "tests":
+                return 200, run_unit_tests(), out
+            demo = str(body.get("demo"))
+            if demo not in DEMOS_BY_ID:
+                return 400, {"error": "Unknown demonstration."}, out
+            params = body.get("params") if isinstance(body.get("params"), dict) else {}
+            return 200, run_demo(demo, params, record=bool(body.get("record", True))), out
+        if path == "/api/playground" and method == "POST":
+            return 200, playground(body.get("initial", 1), body.get("actions")), out
+        if path == "/api/auth":
+            if method == "GET":
+                return 200, accounts.auth_status(cookies, out), out
+            if method == "POST":
+                return 200, accounts.auth_action(body, cookies, out), out
+        if path == "/api/account":
+            if method == "GET":
+                return 200, accounts.account_get(cookies, out), out
+            if method == "POST":
+                return 200, accounts.account_action(body, cookies, out), out
+        if path == "/api/errors" and method == "POST":
+            def clip(key: str, n: int) -> str:
+                return str(body.get(key) or "")[:n]
+            ref = log_event("client_error", message=clip("message", 300), where=clip("where", 120),
+                            line=clip("line", 10), view=clip("view", 40))
+            return 200, {"ok": True, "ref": ref}, out
+        return 404, {"error": "There is nothing at this address."}, out
+    except accounts.AccountError as exc:
+        return exc.code, {"error": exc.message}, out
 
 
 # ----------------------------------------------------------------------
 # HTTP handler (Vercel's Python runtime and server.py both use this class)
 # ----------------------------------------------------------------------
-import json  # noqa: E402
+from http.cookies import SimpleCookie  # noqa: E402
 from http.server import BaseHTTPRequestHandler  # noqa: E402
 from urllib.parse import parse_qs, urlparse  # noqa: E402
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "SemaphoreLab/2.0"
+    server_version = "SemaphoreLab/3.0"
 
     def log_message(self, fmt, *args):
         pass
 
-    def _send(self, code: int, body: bytes, ctype: str) -> None:
+    def _send(self, code: int, body: bytes, ctype: str, extra: Optional[List[str]] = None) -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        for line in extra or []:              # session cookies, or "Header: value" lines
+            if line.startswith((accounts.ACCESS_COOKIE + "=", accounts.REFRESH_COOKIE + "=")):
+                self.send_header("Set-Cookie", line)
+            else:
+                name, _, value = line.partition(": ")
+                self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
-    def _json(self, code: int, payload: Any) -> None:
-        self._send(code, json.dumps(payload).encode("utf-8"), "application/json; charset=utf-8")
+    def _json(self, code: int, payload: Any, extra: Optional[List[str]] = None) -> None:
+        self._send(code, json.dumps(payload).encode("utf-8"), "application/json; charset=utf-8", extra)
+
+    def _client_ip(self) -> str:
+        fwd = self.headers.get("X-Forwarded-For") or self.headers.get("X-Real-IP") or ""
+        return fwd.split(",")[0].strip() or self.client_address[0]
+
+    def _cookies(self) -> Dict[str, str]:
+        jar = SimpleCookie()
+        try:
+            jar.load(self.headers.get("Cookie") or "")
+        except Exception:
+            return {}
+        return {k: m.value for k, m in jar.items()}
+
+    def _same_origin(self) -> bool:
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True                       # same-origin fetches from older browsers, curl
+        return urlparse(origin).netloc == (self.headers.get("X-Forwarded-Host") or self.headers.get("Host"))
 
     def _handle(self, method: str) -> None:
         url = urlparse(self.path)
         try:
             body: dict = {}
             if method == "POST":
+                if not self._same_origin():
+                    return self._json(403, {"error": "Requests from other websites are not accepted."})
                 if "application/json" not in (self.headers.get("Content-Type") or ""):
-                    return self._json(400, {"error": "Content-Type must be application/json"})
+                    return self._json(400, {"error": "Content-Type must be application/json."})
                 length = int(self.headers.get("Content-Length") or 0)
                 if length > 65536:
-                    return self._json(400, {"error": "request too large"})
-                body = json.loads(self.rfile.read(length) or b"{}")
+                    return self._json(413, {"error": "The request is too large."})
+                try:
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                except ValueError:
+                    return self._json(400, {"error": "The request was not valid JSON."})
                 if not isinstance(body, dict):
-                    return self._json(400, {"error": "body must be a JSON object"})
-            code, payload = dispatch(method, url.path, parse_qs(url.query), body)
-            self._json(code, payload)
-        except (ValueError, json.JSONDecodeError) as exc:
-            self._json(400, {"error": str(exc)})
+                    return self._json(400, {"error": "The request must be a JSON object."})
+            code, payload, extra = dispatch(method, url.path, parse_qs(url.query), body,
+                                            self._cookies(), client_key(self._client_ip()))
+            self._json(code, payload, extra)
         except Exception:
-            self._json(500, {"error": traceback.format_exc(limit=3)})
+            ref = log_event("server_error", path=url.path, trace=traceback.format_exc(limit=8))
+            self._json(500, {"error": "Something went wrong on the server. Please try again.", "ref": ref})
 
     def do_GET(self) -> None:
         self._handle("GET")

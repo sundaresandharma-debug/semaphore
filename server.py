@@ -12,6 +12,7 @@ webcore.py; on Vercel they are served by the thin wrappers in api/.
 from __future__ import annotations
 
 import argparse
+import json
 import threading
 import webbrowser
 from http.server import ThreadingHTTPServer
@@ -20,17 +21,31 @@ from urllib.parse import urlparse
 
 from webcore import ROOT, ApiHandler
 
-INDEX = ROOT / "public" / "index.html"
+PUBLIC = ROOT / "public"
+TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
+         ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8"}
+
+
+# Same headers as vercel.json, so the content security policy is tested locally too.
+SECURITY_HEADERS = [h["key"] + ": " + h["value"]
+                    for h in json.loads((ROOT / "vercel.json").read_text())["headers"][0]["headers"]
+                    if h["key"] != "Strict-Transport-Security"]
 
 
 class LocalHandler(ApiHandler):
+    """Serves public/ like Vercel does (clean URLs, custom 404) and the API from webcore."""
+
     def do_GET(self) -> None:
         path = urlparse(self.path).path
-        if path in ("/", "/index.html"):
-            return self._send(200, INDEX.read_bytes(), "text/html; charset=utf-8")
-        if path == "/favicon.ico":
-            return self._send(204, b"", "image/x-icon")
-        return super().do_GET()
+        if path.startswith("/api/"):
+            return super().do_GET()
+        files = {p.name: p for p in PUBLIC.iterdir() if p.is_file()}   # only real files, no ../ tricks
+        name = "index.html" if path == "/" else path.lstrip("/")
+        target = files.get(name) or files.get(name + ".html")
+        if target is None or name == "404.html":
+            return self._send(404, files["404.html"].read_bytes(), TYPES[".html"], SECURITY_HEADERS)
+        return self._send(200, target.read_bytes(), TYPES.get(target.suffix, "application/octet-stream"),
+                          SECURITY_HEADERS)
 
 
 def make_server(host: str, port: int) -> ThreadingHTTPServer:
