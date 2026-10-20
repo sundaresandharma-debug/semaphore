@@ -248,7 +248,7 @@ import secrets  # noqa: E402
 import accounts  # noqa: E402
 
 LIMITS = {                     # requests per minute per client
-    "run": 15, "playground": 120, "auth": 10, "account": 40, "errors": 10, "default": 240,
+    "run": 30, "playground": 120, "auth": 10, "account": 40, "errors": 10, "default": 240,
 }
 _SALT = secrets.token_bytes(16)           # per process: raw IP addresses are never stored
 _HITS: Dict[Tuple[str, str], collections.deque] = {}

@@ -389,7 +389,7 @@ A note on the GIL: CPython's global interpreter lock lets only one thread run Py
 * **Readers-Writers prefers readers**, so writers can starve. A writers-preference or fair version is a possible extension.
 * **Some tests rely on bounded timing** (timeouts of a few seconds, and short polling of `waiting`). They passed 25 repeated runs, 5 consecutive full runs and 3 runs under heavy CPU load, but an extremely overloaded machine could in theory time out.
 * **Not run on Windows** by the author of this build (see section 4).
-* **The browser page polls** the server about ten times per second. It shows a faithful sampled view, not every instant, so very short states may not be visible.
+* **The browser replays a sampled recording.** Each run is executed to completion on the server while the state is sampled every 0.1 s, then animated in the browser. Very short states between two samples may not be visible, and the animation starts only after the run has finished.
 
 ## 13. Future enhancements
 
@@ -398,4 +398,4 @@ A note on the GIL: CPython's global interpreter lock lets only one thread run Py
 * Condition variables and monitors as an alternative to semaphores, compared side by side.
 * Priority inheritance, and a demonstration of priority inversion.
 * Deadlock detection using a resource-allocation graph, and the banker's algorithm for avoidance.
-* Streaming updates to the browser (server-sent events or WebSockets) instead of polling.
+* Streaming updates to the browser (server-sent events or WebSockets) so the animation starts while the threads are still running.

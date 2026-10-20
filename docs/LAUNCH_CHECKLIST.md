@@ -39,7 +39,7 @@ Status of every launch item, where it lives and how it was checked.
 | Real login and logout | Done in code, **You** to switch on | `accounts.py` with Supabase Auth; follow `docs/SETUP_ACCOUNTS.md` |
 | Password reset | Done | Email link, then a new-password form; the same answer is shown whether or not the address exists |
 | Row level security | Done | `supabase/schema.sql`: select, insert and delete only where `auth.uid() = user_id`; no update policy |
-| Rate limiting | Done | Per-client sliding window in `webcore.py` (10 sign-in actions, 15 demo runs per minute and so on), Supabase Auth's own limits, and a database trigger (30 saves per hour, 200 per account). The in-memory limit is per server instance |
+| Rate limiting | Done | Per-client sliding window in `webcore.py` (10 sign-in actions, 30 demo runs per minute and so on), Supabase Auth's own limits, and a database trigger (30 saves per hour, 200 per account). The in-memory limit is per server instance |
 | Database backups | Done in code, **You** to switch on | `.github/workflows/db-backup.yml`: nightly, AES-256 encrypted, kept 14 days; needs two GitHub secrets |
 | Transactional email | **You** | Connect an SMTP provider in Supabase so confirmation and reset emails reach real users |
 
