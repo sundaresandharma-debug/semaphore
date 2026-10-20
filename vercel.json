@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "outputDirectory": "public",
+  "functions": {
+    "api/*.py": {
+      "maxDuration": 60,
+      "includeFiles": "{webcore.py,main.py,server.py,README.md,VIVA.md,src/**,demos/**,tests/**}"
+    }
+  }
+}
