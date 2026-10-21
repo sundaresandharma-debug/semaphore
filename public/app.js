@@ -220,7 +220,6 @@ const NAV = [
   {id: 'dining_philosophers', label: 'Dining philosophers'},
   {id: 'playground', label: 'Playground', gap: true},
   {id: 'tests', label: 'Unit tests'},
-  {id: 'source', label: 'Source code'},
   {id: 'account', label: 'Account', gap: true},
 ];
 
@@ -233,7 +232,6 @@ function show(id, fromHistory) {
   $$('.station').forEach(b => { if (b.dataset.id === id) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (location.hash !== '#' + id) history[fromHistory ? 'replaceState' : 'pushState'](null, '', '#' + id);
   if (id === 'playground') Playground.refresh();
-  if (id === 'source') Source.open();
   if (id === 'account') Account.open();
   window.scrollTo(0, 0);
   if (!fromHistory || App.ready) { const h = $('#view-' + id + ' h2'); if (h) { h.setAttribute('tabindex', '-1'); h.focus({preventScroll: true}); } }
@@ -641,50 +639,6 @@ const Tests = {
   }
 };
 
-/* ------------------------------ source viewer ------------------------------ */
-const KW = new Set('def class return if elif else for while in not and or is import from as with try except finally raise pass break continue lambda yield None True False self global nonlocal assert del'.split(' '));
-function highlightPy(src) {
-  const re = /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|f?"(?:\\.|[^"\\\n])*"|f?'(?:\\.|[^'\\\n])*')|\b([A-Za-z_][A-Za-z0-9_]*)\b|(\b\d+(?:\.\d+)?\b)/g;
-  let out = '', last = 0, m;
-  while ((m = re.exec(src))) {
-    out += esc(src.slice(last, m.index)); last = re.lastIndex;
-    if (m[1]) out += `<span class="c">${esc(m[1])}</span>`;
-    else if (m[2]) out += `<span class="s">${esc(m[2])}</span>`;
-    else if (m[3]) out += KW.has(m[3]) ? `<span class="k">${m[3]}</span>` : esc(m[3]);
-    else out += `<span class="n">${m[4]}</span>`;
-  }
-  return out + esc(src.slice(last));
-}
-const Source = {
-  files: null, current: 'src/semaphore.py',
-  build() {
-    const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'view-source';
-    sec.innerHTML = `<header class="vhead"><h2>Source code</h2><p class="lede">The exact files that run the demonstrations. Start with <code>src/semaphore.py</code>: the comments at the top explain the algorithm.</p></header>
-      <div class="src"><ul class="flist" id="sFiles"></ul><div class="code" id="sCode" tabindex="0" aria-label="Source code"></div></div>`;
-    $('#main').appendChild(sec);
-    $('#sFiles').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (b) this.load(b.dataset.f); });
-  },
-  async open() {
-    if (!this.files) {
-      $('#sFiles').innerHTML = '<li><div class="skel skel-line"></div></li>'.repeat(8);
-      try { this.files = await api('/api/source'); } catch (e) { $('#sFiles').innerHTML = ''; $('#sCode').textContent = 'Could not load the file list. ' + e.message; return; }
-      $('#sFiles').innerHTML = this.files.map(f => `<li><button data-f="${f.file}">${esc(f.file)} <small>${f.lines}</small></button></li>`).join('');
-    }
-    this.load(this.current);
-  },
-  async load(file) {
-    this.current = file;
-    $$('#sFiles button').forEach(b => b.setAttribute('aria-current', b.dataset.f === file ? 'true' : 'false'));
-    $('#sCode').innerHTML = `<div class="code-skel" aria-busy="true" aria-label="Loading file">${Array.from({length: 14}, (_, i) => `<div class="skel skel-line" style="width:${30 + (i * 37) % 60}%"></div>`).join('')}</div>`;
-    try {
-      const d = await api('/api/source?file=' + encodeURIComponent(file));
-      const lines = d.text.split('\n').length;
-      $('#sCode').innerHTML = `<pre class="gut">${Array.from({length: lines}, (_, i) => i + 1).join('\n')}</pre><pre class="src-text">${file.endsWith('.py') ? highlightPy(d.text) : esc(d.text)}</pre>`;
-      $('#sCode').scrollTop = 0;
-    } catch (e) { $('#sCode').textContent = e.message; }
-  }
-};
-
 /* -------------------------------- account -------------------------------- */
 const Account = {
   mode: 'signin', notice: '', recovery: null, runs: null, loadingRuns: false,
@@ -984,7 +938,7 @@ async function boot() {
   setupTheme();
   buildOverview();
   App.demos.forEach(buildDemoView);
-  Playground.build(); Tests.build(); Source.build(); Account.build();
+  Playground.build(); Tests.build(); Account.build();
   setUser(auth.user || null);
   const fromEmail = await handleAuthLink();
   window.addEventListener('popstate', async () => {

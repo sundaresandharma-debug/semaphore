@@ -48,7 +48,7 @@ Status of every launch item, where it lives and how it was checked.
 | Item | Status | Where / notes |
 | --- | --- | --- |
 | Loading states | Done | Live timer and overlay while the server runs a demo; buttons show *Signing in...*, *Saving...* and so on |
-| Skeleton loaders | Done | First page load, source viewer, test list and saved results |
+| Skeleton loaders | Done | First page load, test list and saved results |
 | Empty states | Done | Saved results, test results, demo log, Playground queue |
 | Clear error messages | Done | Every request goes through one function that turns failures into plain sentences, with a reference code for server errors |
 | Form validation | Done | Per-field messages linked with `aria-describedby`, focus moves to the first problem; the server validates again |

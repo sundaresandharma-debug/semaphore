@@ -61,7 +61,7 @@ Open the Vercel link, or start `python server.py` **before** the evaluation and 
 | --- | --- | --- |
 | 1 | **Overview**, press *Run all four demonstrations* | "One click runs the four demonstrations and the unit tests against the real Python code. Everything is verified automatically." |
 | 2 | **Race condition**, Run (a few seconds) | "Left: no semaphore, a different wrong total every run. Right: with a BinarySemaphore, exactly the expected number." |
-| 3 | **Source code**, `src/semaphore.py` | "This is the algorithm: lock-protected counter, FIFO queue, one Event per sleeping thread, direct hand-off." |
+| 3 | Open `src/semaphore.py` in your editor | "This is the algorithm: lock-protected counter, FIFO queue, one Event per sleeping thread, direct hand-off." |
 | 4 | **Producer-consumer**, Run | "Red means blocked. Producers sleep when `empty` reaches 0, consumers when `full` reaches 0. Every item is consumed once." |
 | 5 | **Readers-writers**, Run | "Many readers together, but the writer always alone. Zero violations. This version favours readers, so writers can starve." |
 | 6 | **Dining philosophers**, Run, then untick the room and Run again | "With the room, nobody deadlocks. Without it, all five hold one fork and wait. The watchdog detects it instead of hanging." |

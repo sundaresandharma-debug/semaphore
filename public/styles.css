@@ -217,25 +217,12 @@ table.summary .linklike{background:none;border:0;color:var(--blue);padding:0;fon
 .trow .doc{display:block;color:var(--ink2);font-size:13.5px}
 .trow pre{white-space:pre-wrap;font:12px var(--mono);background:var(--wash-stop);padding:8px;margin:6px 0 0}
 
-/* ---------- source ---------- */
-.src{display:grid;grid-template-columns:230px minmax(0,1fr);gap:24px;margin-top:20px;align-items:start}
-.flist{list-style:none;margin:0;padding:0;font-size:14px}
-.flist li button{display:block;width:100%;text-align:left;background:none;border:0;padding:5px 8px;color:var(--ink)}
-.flist li button:hover{background:var(--soft)}
-.flist li button[aria-current=true]{font-weight:700;background:var(--soft);text-decoration:underline}
-.flist small{color:var(--ink2)}
-.code{display:flex;background:var(--field);border:1px solid var(--rule);max-height:76vh;overflow:auto;font:13px/1.55 var(--mono)}
-.code pre{margin:0;padding:12px 0;white-space:pre}
-.code .gut{color:var(--faint);text-align:right;padding:12px 10px;user-select:none;border-right:1px solid var(--rule);position:sticky;left:0;background:var(--gut)}
-.code .src-text{padding:12px 16px;min-width:0}
-.c{color:var(--syn-c);font-style:italic}.s{color:var(--syn-s)}.k{color:var(--syn-k);font-weight:600}.n{color:var(--syn-n)}
-
 /* ---------- offline / error ---------- */
 .fatal{max-width:640px;margin:90px auto;padding:24px;border:3px solid var(--stop);background:var(--field)}
 .fatal h2{color:var(--stop)} .fatal pre{background:var(--codebg);padding:10px;font:14px var(--mono)}
 
 @media (max-width:1100px){
-  .workspace,.play,.src{grid-template-columns:1fr}
+  .workspace,.play{grid-template-columns:1fr}
   .pc-grid,.rw-grid,.dining{grid-template-columns:1fr}
 }
 @media (max-width:860px){
@@ -343,7 +330,6 @@ dl.explain dd{color:var(--ink2);font-size:14.5px}
 .skel-btn{height:42px;width:300px;margin:14px 0}
 .skel-row{height:44px;width:100%;margin-bottom:6px}
 .skel-line{height:12px;margin:7px 0}
-.code-skel{padding:14px 18px;width:100%}
 
 /* ---------- empty states, notices ---------- */
 .empty-state{border:1.5px dashed var(--rule);padding:22px;text-align:center;border-radius:2px}

@@ -53,19 +53,6 @@ def demo_metadata() -> List[dict]:
     return out
 
 
-def source_files() -> List[str]:
-    files = ["README.md", "VIVA.md", "main.py", "webcore.py", "accounts.py", "server.py"]
-    for folder in ("src", "demos", "tests", "api"):
-        files += sorted(f"{folder}/{p.name}" for p in (ROOT / folder).glob("*.py")
-                        if p.name != "__init__.py" or folder == "src")
-    return [f for f in files if (ROOT / f).is_file()]
-
-
-def source_list() -> List[dict]:
-    return [{"file": f, "lines": (ROOT / f).read_text(encoding="utf-8").count("\n") + 1}
-            for f in source_files()]
-
-
 # ----------------------------------------------------------------------
 # Unit tests
 # ----------------------------------------------------------------------
@@ -300,13 +287,6 @@ def dispatch(method: str, path: str, query: Dict[str, List[str]], body: dict,
     try:
         if path == "/api/catalog" and method == "GET":
             return 200, demo_metadata(), out
-        if path == "/api/source" and method == "GET":
-            name = (query.get("file") or [""])[0]
-            if not name:
-                return 200, source_list(), out
-            if name not in source_files():
-                return 404, {"error": "That file is not part of the project."}, out
-            return 200, {"file": name, "text": (ROOT / name).read_text(encoding="utf-8")}, out
         if path == "/api/run" and method == "POST":
             if body.get("kind") == "tests":
                 return 200, run_unit_tests(), out
