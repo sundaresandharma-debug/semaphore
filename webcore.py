@@ -186,7 +186,7 @@ import secrets  # noqa: E402
 
 
 LIMITS = {                     # requests per minute per client
-    "run": 30, "playground": 120, "errors": 10, "default": 240,
+    "run": 30, "playground": 120, "default": 240,
 }
 _SALT = secrets.token_bytes(16)           # per process: raw IP addresses are never stored
 _HITS: Dict[Tuple[str, str], collections.deque] = {}
@@ -245,12 +245,6 @@ def dispatch(method: str, path: str, query: Dict[str, List[str]], body: dict, cl
             return 200, run_demo(demo, params, record=bool(body.get("record", True))), out
         if path == "/api/playground" and method == "POST":
             return 200, playground(body.get("initial", 1), body.get("actions")), out
-        if path == "/api/errors" and method == "POST":
-            def clip(key: str, n: int) -> str:
-                return str(body.get(key) or "")[:n]
-            ref = log_event("client_error", message=clip("message", 300), where=clip("where", 120),
-                            line=clip("line", 10), view=clip("view", 40))
-            return 200, {"ok": True, "ref": ref}, out
         return 404, {"error": "There is nothing at this address."}, out
     except ValueError as exc:
         return 400, {"error": str(exc)}, out

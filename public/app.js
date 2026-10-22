@@ -582,33 +582,6 @@ const Playground = {
   }
 };
 
-/* ------------------------- consent and error reports ------------------------- */
-const Consent = {
-  get() { try { return JSON.parse(localStorage.getItem('semlab-consent') || 'null'); } catch (e) { return null; } },
-  set(errors) {
-    try { localStorage.setItem('semlab-consent', JSON.stringify({errors, v: 1, at: new Date().toISOString().slice(0, 10)})); } catch (e) { /* private mode */ }
-    $('#consent').hidden = true;
-    Intro.maybeStart();
-  },
-  setup() {
-    $('#consentYes').addEventListener('click', () => this.set(true));
-    $('#consentNo').addEventListener('click', () => this.set(false));
-    $('#cookieSettings').addEventListener('click', () => { $('#consent').hidden = false; $('#consentNo').focus(); });
-    if (!this.get()) $('#consent').hidden = false;
-  },
-};
-
-let reportsSent = 0;
-function reportError(message, where, line) {
-  const c = Consent.get();
-  if (!c || !c.errors || reportsSent >= 5) return;
-  reportsSent++;
-  fetch('/api/errors', {method: 'POST', keepalive: true, headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({message: String(message).slice(0, 300), where: String(where || '').slice(0, 120), line: String(line || ''), view: location.hash.slice(1, 40)})}).catch(() => {});
-}
-window.addEventListener('error', e => { let where = ''; try { where = new URL(e.filename).pathname; } catch (x) { /* inline */ } reportError(e.message, where, e.lineno); });
-window.addEventListener('unhandledrejection', e => reportError((e.reason && e.reason.message) || e.reason, 'promise', ''));
-
 /* --------------------------------- onboarding --------------------------------- */
 const Intro = {
   step: 0,
@@ -668,7 +641,7 @@ async function boot() {
   window.addEventListener('popstate', () => show(location.hash.slice(1), true));
   show(location.hash.slice(1) || 'overview', true);
   App.ready = true;
-  Consent.setup(); Intro.setup();
-  if (Consent.get()) Intro.maybeStart();
+  Intro.setup();
+  Intro.maybeStart();
 }
 boot();

@@ -64,14 +64,13 @@ my-semaphore-project/
 ├── api/                      Vercel serverless functions (thin wrappers around webcore.py)
 │   ├── catalog.py            GET  /api/catalog     list of demos and their settings
 │   ├── playground.py         POST /api/playground  replay wait()/signal() clicks on a real Semaphore
-│   ├── run.py                POST /api/run         run a demo to completion
-│   └── errors.py             POST /api/errors      browser error reports (only with consent)
+│   └── run.py                POST /api/run         run a demo to completion
 ├── public/
 │   ├── index.html            the browser interface (plain HTML, CSS and JavaScript, no libraries)
 │   ├── app.js, styles.css    its script and styles
-│   ├── privacy.html, terms.html, cookies.html, refunds.html, 404.html
+│   ├── 404.html              page-not-found page
 │   └── favicon.svg, theme.js
-├── docs/                     LAUNCH_CHECKLIST.md (privacy, consent, accessibility, security)
+├── docs/                     LAUNCH_CHECKLIST.md (accessibility, security, quality)
 ├── src/
 │   ├── __init__.py
 │   ├── semaphore.py          Semaphore and BinarySemaphore (the heart of the project)
@@ -181,7 +180,7 @@ On each demonstration page: **Run** uses your settings, **Quick run** uses fast 
 
 The server listens on this computer only (`127.0.0.1`), accepts only JSON requests and serves only a fixed list of project files.
 
-The status of every launch item (privacy, consent, accessibility, security) is in
+The status of every launch item (accessibility, security, quality) is in
 [`docs/LAUNCH_CHECKLIST.md`](docs/LAUNCH_CHECKLIST.md).
 
 ### Deploy on Vercel
