@@ -16,7 +16,6 @@ Status of every launch item, where it lives and how it was checked.
 | Form consents | Not applicable | The site has no forms that collect personal data |
 | Age consent for children's data | Not applicable | No personal data is collected from anyone, so the site is safe at any age |
 | Business details | Done | Footer and legal pages: Sundaresan D, India, student project |
-| Contact email | **You** | Replace `[your-email]` in `public/index.html` and `public/*.html` (search for `contact-email`) |
 | No dark patterns or hidden fees | Done | No pre-ticked boxes, equal-weight consent buttons, no fees anywhere |
 | No fake reviews or unsupported claims | Done | No testimonials or ratings. Every claim on the site comes from a check the code runs and shows |
 | Legal review | **You** | The policies describe exactly what the code does, but they are not legal advice |
