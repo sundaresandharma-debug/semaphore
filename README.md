@@ -176,7 +176,7 @@ The terminal prints `Open: http://localhost:8000` and your browser opens by itse
 
 Pages: **Overview** (run all four demos with one button), one page per demonstration (change the settings, press Run, watch the semaphores, see the verification checklist), and the **Playground** (operate a real semaphore by hand).
 
-On each demonstration page: **Run** uses your settings, **Quick run** uses fast settings and shows the result in a second or two, **Reset to defaults** restores the settings, and an estimate of the run time appears under the settings (with a warning if the run would pass the 50-second server limit). After a run you can change the **replay speed** (0.5× to 4×) and press **Replay again** to watch the same run without running it again. The **Theme** button in the sidebar switches between automatic, light and dark colours.
+On each demonstration page: **Run** uses your settings, **Quick run** uses fast settings and shows the result in a second or two, **Reset to defaults** restores the settings, and an estimate of the run time appears under the settings (with a warning if the run would pass the 50-second server limit). After a run you can change the **replay speed** (0.25× to 4×) and press **Replay again** to watch the same run without running it again. The **Theme** button in the sidebar switches between automatic, light and dark colours.
 
 The server listens on this computer only (`127.0.0.1`), accepts only JSON requests and serves only a fixed list of project files.
 

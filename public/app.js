@@ -265,7 +265,7 @@ function buildDemoView(meta) {
       <div class="form-foot"><span class="est" data-k="est"></span><button type="button" class="linklike" data-k="defaults">Reset to defaults</button></div></form>
     <div class="workspace"><div class="stage-col"><div class="stage" data-k="stage"></div>
       <div class="replaybar"><span class="rb-label">Replay speed</span>
-        <div class="seg" role="group" aria-label="Replay speed">${[0.5, 1, 2, 4].map(s => `<button type="button" data-speed="${s}" aria-pressed="${s === 1}">${s}×</button>`).join('')}</div>
+        <div class="seg" role="group" aria-label="Replay speed">${[0.25, 0.5, 1, 2, 4].map(s => `<button type="button" data-speed="${s}" aria-pressed="${s === 1}">${s}×</button>`).join('')}</div>
         <button type="button" class="btn" data-k="again" disabled title="Play the last run again without running it again">Replay again</button></div></div>
       <aside class="side"><section class="verify" data-k="verify"><h3>Verification</h3>
         <p class="muted">Run the demonstration to see which properties were checked.</p></section>
