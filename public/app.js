@@ -58,105 +58,10 @@ function gauge(name, s, max, big) {
       <span class="sig-q">${w ? cars + ' blocked' : 'none blocked'}</span></div></div>`;
 }
 
-const STATUS_TEXT = {working: 'working', blocked: 'blocked', active: 'in buffer', done: 'done', aborted: 'stopped',
-  idle: 'idle', waiting: 'waiting', reading: 'reading', writing: 'writing', thinking: 'thinking', hungry: 'hungry',
+const STATUS_TEXT = {done: 'done', aborted: 'stopped', waiting: 'waiting', thinking: 'thinking', hungry: 'hungry',
   eating: 'eating', deadlocked: 'deadlocked'};
-function actorRows(map, blockedText, countLabel) {
-  return Object.entries(map || {}).map(([name, a]) => {
-    const st = a.status || 'idle';
-    const label = (st === 'blocked' && blockedText) ? blockedText : (STATUS_TEXT[st] || st);
-    return `<li class="actor st-${st}"><span class="dot"></span><span class="who"><b>${esc(name)}</b><small>${countLabel}: ${a.count ?? a.ops ?? 0}</small></span><span class="stt">${esc(label)}</span></li>`;
-  }).join('');
-}
-
 /* =========================== demo renderers =========================== */
 const RENDER = {};
-
-RENDER.race = {
-  setup(stage) {
-    stage.innerHTML = `<div class="lanes">
-      <section class="lane" data-lane="u"><h3>Without a semaphore</h3><output class="big" data-k="uc">-</output>
-        <p class="sub">expected <b data-k="ue">-</b></p><div class="bar"><i data-k="ub"></i></div>
-        <p class="verdict" data-k="uv"></p><ul class="chips" data-k="ur"></ul></section>
-      <section class="lane" data-lane="s"><h3>With a BinarySemaphore</h3><output class="big" data-k="sc">-</output>
-        <p class="sub">expected <b data-k="se">-</b></p><div class="bar"><i data-k="sb"></i></div>
-        <p class="verdict" data-k="sv"></p><div class="gauges" data-k="mx"></div></section></div>
-      <div class="tracks" data-k="tracks" aria-label="Progress of each thread"></div>`;
-    this.update(stage, {});
-  },
-  update(stage, st) {
-    const q = k => $(`[data-k=${k}]`, stage);
-    const exp = st.expected, ph = st.phase;
-    const results = st.unsync_results || [];
-    q('ue').textContent = fmt(exp); q('se').textContent = fmt(exp);
-    q('uc').textContent = fmt(st.unsync_count);
-    q('sc').textContent = fmt(st.sync_count);
-    q('ub').style.width = exp ? Math.min(100, (st.unsync_count || 0) / exp * 100) + '%' : '0';
-    q('sb').style.width = exp ? Math.min(100, (st.sync_count || 0) / exp * 100) + '%' : '0';
-    $$('.lane', stage).forEach(l => l.classList.toggle('active', (l.dataset.lane === 'u' && ph === 'unsync') || (l.dataset.lane === 's' && ph === 'sync')));
-    const uv = q('uv');
-    if (ph === 'unsync') { uv.className = 'verdict'; uv.textContent = `Run ${st.run_no}: the threads are racing...`; }
-    else if (results.length) {
-      const lost = exp - results[results.length - 1];
-      uv.className = 'verdict ' + (lost ? 'bad' : ''); uv.textContent = lost ? `Lost ${fmt(lost)} updates in the last run` : 'No update lost this time (races are random)';
-    } else { uv.className = 'verdict'; uv.textContent = ''; }
-    const sv = q('sv');
-    if (ph === 'sync') { sv.className = 'verdict'; sv.textContent = 'Threads take turns at the semaphore...'; }
-    else if (ph === 'done' && st.sync_count !== undefined) {
-      sv.className = 'verdict ' + (st.sync_count === exp ? 'good' : 'bad');
-      sv.textContent = st.sync_count === exp ? 'Exact: no update lost' : `Lost ${fmt(exp - st.sync_count)} updates`;
-    } else { sv.className = 'verdict'; sv.textContent = ''; }
-    q('ur').innerHTML = results.map((r, i) => `<li>Run ${i + 1}: <b>${fmt(r)}</b> <span>(lost ${fmt(exp - r)})</span></li>`).join('');
-    q('mx').innerHTML = gauge('mutex', st.sem && st.sem.mutex);
-    const per = exp && st.threads ? exp / st.threads : 0;
-    q('tracks').innerHTML = (st.progress || []).map((p, i) =>
-      `<div class="track"><span>Thread ${i + 1}</span><div class="bar"><i style="width:${per ? Math.min(100, p / per * 100) : 0}%"></i></div><span>${per ? Math.round(Math.min(100, p / per * 100)) : 0}%</span></div>`).join('');
-  }
-};
-
-RENDER.producer_consumer = {
-  setup(stage) {
-    stage.innerHTML = `<div class="gauges" data-k="g"></div><div class="pc-grid">
-      <div><h3>Producers</h3><ul class="actors" data-k="prod"></ul></div>
-      <div><h3>Buffer</h3><div class="slots" data-k="slots"></div><p class="flow" data-k="flow">Waiting to start.</p></div>
-      <div><h3>Consumers</h3><ul class="actors" data-k="cons"></ul></div></div>`;
-    this.update(stage, {});
-  },
-  update(stage, st) {
-    const q = k => $(`[data-k=${k}]`, stage), sem = st.sem || {}, cap = st.capacity || 0;
-    q('g').innerHTML = gauge('empty', sem.empty, cap) + gauge('full', sem.full, cap) + gauge('mutex', sem.mutex);
-    const buf = st.buffer || [];
-    q('slots').innerHTML = Array.from({length: cap}, (_, i) => `<div class="slot ${buf[i] ? 'full' : ''}">${buf[i] ? esc(buf[i]) : 'free'}</div>`).join('');
-    q('flow').textContent = st.total ? `Produced ${st.produced} of ${st.total}, consumed ${st.consumed} of ${st.total}. Buffer holds ${buf.length} of ${cap}.` : 'Waiting to start.';
-    q('prod').innerHTML = actorRows(st.producers, 'blocked: buffer full', 'made');
-    q('cons').innerHTML = actorRows(st.consumers, 'blocked: buffer empty', 'took');
-  }
-};
-
-RENDER.readers_writers = {
-  setup(stage) {
-    stage.innerHTML = `<div class="gauges" data-k="g"></div><div class="rw-grid">
-      <div><h3>Readers</h3><ul class="actors" data-k="rd"></ul></div>
-      <div><div class="resource" data-k="res"><h3>Shared resource</h3><p class="rs" data-k="rs">idle</p>
-        <p class="data">a = <b data-k="da">0</b>, b = <b data-k="db">0</b>, version <b data-k="dv">0</b></p></div>
-        <p class="rc">read_count = <b data-k="rc">0</b></p><p class="viol" data-k="viol">0 violations detected</p></div>
-      <div><h3>Writers</h3><ul class="actors" data-k="wr"></ul></div></div>`;
-    this.update(stage, {});
-  },
-  update(stage, st) {
-    const q = k => $(`[data-k=${k}]`, stage), sem = st.sem || {}, d = st.data || {a: 0, b: 0, version: 0};
-    q('g').innerHTML = gauge('mutex', sem.mutex) + gauge('rw', sem.rw);
-    q('rd').innerHTML = actorRows(st.readers, '', 'reads');
-    q('wr').innerHTML = actorRows(st.writers, '', 'writes');
-    const ar = st.active_readers || 0, aw = st.active_writers || 0, res = q('res');
-    res.className = 'resource ' + (aw ? 'writing' : ar ? 'reading' : '');
-    q('rs').textContent = aw ? 'a writer is writing' : ar ? `${ar} reader${ar > 1 ? 's' : ''} reading` : 'idle';
-    q('da').textContent = d.a; q('db').textContent = d.b; q('dv').textContent = d.version;
-    q('rc').textContent = st.read_count ?? 0;
-    const v = st.violations || 0, ve = q('viol');
-    ve.className = 'viol ' + (v ? 'bad' : ''); ve.textContent = `${v} violation${v === 1 ? '' : 's'} detected`;
-  }
-};
 
 RENDER.dining_philosophers = {
   setup(stage) {
@@ -214,9 +119,6 @@ RENDER.dining_philosophers = {
 const App = {demos: [], views: {}};
 const NAV = [
   {id: 'overview', label: 'Overview'},
-  {id: 'race', label: 'Race condition'},
-  {id: 'producer_consumer', label: 'Producer-consumer'},
-  {id: 'readers_writers', label: 'Readers-writers'},
   {id: 'dining_philosophers', label: 'Dining philosophers'},
   {id: 'playground', label: 'Playground', gap: true},
 ];
@@ -244,9 +146,6 @@ function paramField(p) {
 /* Rough run time in seconds for the current settings (the server stops runs at 50 s). */
 const TIME_LIMIT = 50;
 const ESTIMATE = {
-  race: p => p.threads * p.increments * (p.unsync_runs + 1) * 1e-5 + p.phase_pause * (p.unsync_runs + 1),
-  producer_consumer: p => Math.max(p.items * p.produce_time, Math.ceil(p.producers * p.items / p.consumers) * p.consume_time) + 0.2,
-  readers_writers: p => p.rounds * (p.idle_time + p.read_time) + p.writers * p.rounds * p.write_time + 0.2,
   dining_philosophers: p => p.use_room
     ? Math.max(p.meals * (p.think_time + p.pick_time + p.eat_time), 5 * p.meals * (p.eat_time + p.pick_time) / 2) + 0.2
     : p.watchdog + Math.max(p.pick_time, 0.1) + 1,
@@ -455,38 +354,34 @@ function renderEvents(v, reset) {
 
 /* -------------------------------- overview -------------------------------- */
 const ICON = {
-  race: '<rect x="3" y="5" width="18" height="3"/><rect x="3" y="10.5" width="12" height="3"/><rect x="3" y="16" width="7" height="3"/>',
-  producer_consumer: '<rect x="2" y="9" width="5" height="6"/><rect x="9.5" y="9" width="5" height="6"/><rect x="17" y="9" width="5" height="6"/><rect x="1" y="5" width="22" height="1.6"/><rect x="1" y="17.4" width="22" height="1.6"/>',
-  readers_writers: '<rect x="3" y="3" width="12" height="18"/><rect x="17" y="3" width="4" height="12"/><path d="M17 16h4l-2 4z"/>',
   dining_philosophers: '<circle cx="12" cy="12.5" r="5"/><circle cx="12" cy="3" r="2"/><circle cx="21" cy="9.5" r="2"/><circle cx="17.5" cy="21" r="2"/><circle cx="6.5" cy="21" r="2"/><circle cx="3" cy="9.5" r="2"/>',
 };
 const icon = id => `<svg class="ico" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">${ICON[id] || ''}</svg>`;
-const SHORT = {
-  race: 'Shared counter: lost updates without a lock, exact with one.',
-  producer_consumer: 'Bounded buffer guarded by empty, full and mutex.',
-  readers_writers: 'Many readers at once, or exactly one writer.',
-  dining_philosophers: 'Five forks, a room semaphore, and no deadlock.',
-};
+const FACTS = s => `Meals eaten: ${s.meals_eaten.join(', ')} (each needed ${s.meals_required}). Fork conflicts: ${s.fork_violations}.`;
 
-const FACTS = {
-  race: s => `Protected counter: ${fmt(s.protected_result)} of ${fmt(s.expected)}. Unprotected runs ended at ${s.unprotected_results.map(fmt).join(', ')}.`,
-  producer_consumer: s => `${s.items_consumed} of ${s.items_planned} items consumed exactly once. Buffer peaked at ${s.max_buffer_size} of ${s.capacity}. Producers blocked ${s.producer_blocks} times, consumers ${s.consumer_blocks} times.`,
-  readers_writers: s => `${s.reads} reads and ${s.writes} writes with ${s.violations} violations. Up to ${s.max_concurrent_readers} readers at once.`,
-  dining_philosophers: s => `Meals eaten: ${s.meals_eaten.join(', ')} (each needed ${s.meals_required}). Fork conflicts: ${s.fork_violations}.`,
-};
+// The overview runs the Dining Philosophers twice. Without the room semaphore, the pause between
+// the two forks makes all five philosophers hold their left fork at once, so the table deadlocks.
+const VERSIONS = [
+  {id: 'room', title: 'With the room semaphore', params: {use_room: true}, expect: 'PASS',
+   short: 'At most four philosophers at the table, so deadlock is impossible.'},
+  {id: 'noroom', title: 'Without the room semaphore', params: {use_room: false, pick_time: 0.1, watchdog: 1}, expect: 'DEADLOCK',
+   short: 'All five can pick up their left fork at once, so the table can deadlock.'},
+];
 
 function buildOverview() {
   const sec = document.createElement('section');
   sec.className = 'view'; sec.id = 'view-overview';
-  const rows = App.demos.map(d => `<tr data-row="${d.id}"><td><button class="dname linklike" data-open="${d.id}">${icon(d.id)}${esc(d.title)}</button></td><td><span class="badge" data-k="b">Not run</span></td><td data-k="t">-</td><td data-k="f" class="muted">${esc(SHORT[d.id] || '')}</td></tr>`).join('');
+  const rows = VERSIONS.map(v => `<tr data-row="${v.id}"><td><button class="dname linklike" data-open="dining_philosophers">${icon('dining_philosophers')}${esc(v.title)}</button></td><td><span class="badge" data-k="b">Not run</span></td><td data-k="t">-</td><td data-k="f" class="muted">${esc(v.short)}</td></tr>`).join('');
   sec.innerHTML = `<header class="vhead"><h2>Semaphores, built from scratch</h2>
-    <p class="lede">A semaphore is a counter that decides how many threads may enter a piece of code at once. This project builds one in Python from just a lock and an event, then proves it works on four classic synchronization problems.</p></header>
-    <div class="hero-actions"><button class="btn primary big" id="runAll">Run all four demonstrations</button></div>
-    <p class="hint">This uses quick settings so it finishes in a few seconds. Open a demonstration for the slower, animated version.</p>
-    <table class="summary"><thead><tr><th>Demonstration</th><th>Result</th><th>Time</th><th>What was verified</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="lede">A semaphore is a counter that decides how many threads may enter a piece of code at once. This project builds one in Python from just a lock and an event, then uses it to solve the Dining Philosophers problem: five philosophers, five forks, and no deadlock.</p></header>
+    <div class="hero-actions"><button class="btn primary big" id="runAll">Run both versions</button></div>
+    <p class="hint">This runs the demonstration twice with quick settings: with the room semaphore it should pass, and without it the watchdog should detect a deadlock. Open Dining philosophers for the slower, animated version.</p>
+    <table class="summary"><thead><tr><th>Version</th><th>Result</th><th>Time</th><th>What was verified</th></tr></thead><tbody>${rows}</tbody></table>
     <p class="overall" id="overall" aria-live="polite"></p>
+    <aside class="howto"><h3>The Dining Philosophers problem</h3>
+      <p>Five philosophers sit at a round table with one fork between each pair. To eat, a philosopher needs both the left and the right fork. If all five pick up their left fork at the same moment, each waits forever for the right one: a <b>deadlock</b>. Here every fork is a binary semaphore, and a counting semaphore called the <b>room</b> lets at most four philosophers sit down, so at least one can always eat.</p></aside>
     <aside class="howto"><h3>How this site works</h3>
-      <p>Every button runs the project's real Python code on the server: the custom <code>Semaphore</code> class and real threads. A demonstration runs to completion on the server while the semaphores are sampled every 0.1 s. The page then animates those samples at the speed the threads actually ran. Nothing in the animation is simulated in the browser.</p></aside>
+      <p>Every button runs the project's real Python code on the server: the custom <code>Semaphore</code> class and real threads. A run finishes on the server while the semaphores are sampled every 0.1 s. The page then animates those samples at the speed the threads actually ran. Nothing in the animation is simulated in the browser.</p></aside>
     <h3 class="explain-title">The two operations</h3>
     <dl class="explain">
       <dt><code>wait()</code></dt><dd>If a permit is free, take it and carry on. If not, join the back of the queue and sleep. A sleeping thread uses no CPU.</dd>
@@ -513,18 +408,21 @@ async function runToEnd(body) {
 async function runAll() {
   const btns = $$('#runAll'); btns.forEach(b => b.disabled = true);
   $('#overall').textContent = 'Running...';
-  let passed = 0;
+  let expected = 0;
   try {
-    for (const d of App.demos) {
-      rowSet(d.id, 'running', 'Running', '-', 'Running...');
-      const r = await runToEnd({demo: d.id, params: {}});
+    for (const v of VERSIONS) {
+      rowSet(v.id, 'running', 'Running', '-', 'Running...');
+      const r = await runToEnd({demo: 'dining_philosophers', params: v.params});
       const [cls, text] = BADGE[r.status] || BADGE.FAIL;
-      rowSet(d.id, cls, text, r.duration.toFixed(2) + ' s', FACTS[d.id](r.stats) + (r.status === 'DEADLOCK' ? ' Watchdog detected a deadlock.' : ''));
-      if (r.status === 'PASS') passed++;
+      const note = r.status === 'DEADLOCK' ? ' The watchdog detected the deadlock and stopped the run.' : '';
+      rowSet(v.id, cls, text, r.duration.toFixed(2) + ' s', FACTS(r.stats) + note);
+      if (r.status === v.expect) expected++;
     }
   } catch (e) { $('#overall').textContent = 'Error: ' + e.message; btns.forEach(b => b.disabled = false); return; }
   btns.forEach(b => b.disabled = false);
-  $('#overall').textContent = `${passed} of ${App.demos.length} demonstrations passed.`;
+  $('#overall').textContent = expected === VERSIONS.length
+    ? 'Both versions behaved as expected: no deadlock with the room semaphore, deadlock detected without it.'
+    : 'A version did not give the expected result.';
 }
 
 /* ------------------------------- playground ------------------------------- */
@@ -586,8 +484,8 @@ const Playground = {
 const Intro = {
   step: 0,
   steps: [
-    ['Welcome to Semaphore Lab', '<p>This site shows a counting semaphore written from scratch in Python, built only from a lock and an event, and uses it to solve four classic synchronization problems.</p><p>Everything you see is produced by the real Python code running on the server.</p>'],
-    ['Watch a demonstration', '<p>Pick a problem in the menu, for example <b>Race condition</b>, and press <b>Run</b>. The threads run on the server, then the page replays what they did at the real speed.</p><p>The <b>Verification</b> panel lists every property that was checked.</p>'],
+    ['Welcome to Semaphore Lab', '<p>This site shows a counting semaphore written from scratch in Python, built only from a lock and an event, and uses it to solve the Dining Philosophers problem.</p><p>Everything you see is produced by the real Python code running on the server.</p>'],
+    ['Watch a demonstration', '<p>Open <b>Dining philosophers</b> in the menu and press <b>Run</b>. The threads run on the server, then the page replays what they did at the real speed.</p><p>The <b>Verification</b> panel lists every property that was checked.</p>'],
     ['Try it yourself', '<p>In the <b>Playground</b> you call <code>wait()</code> and <code>signal()</code> by hand and watch the queue.</p>'],
   ],
   done() { try { return localStorage.getItem('semlab-onboarded') === '1'; } catch (e) { return true; } },

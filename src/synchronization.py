@@ -1,5 +1,5 @@
 """
-Helpers shared by the four demonstrations, the command-line menu and the web UI.
+Helpers shared by the demonstration, the command-line menu and the web UI.
 
 Nothing in here is a synchronization *algorithm*; the algorithms live in
 ``semaphore.py`` and in the demos.  This module provides:

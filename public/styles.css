@@ -124,41 +124,11 @@ ul.actors{list-style:none;margin:0;padding:0}
 .actor .who{display:flex;flex-direction:column;line-height:1.25}
 .actor .who small{color:var(--ink2);font-size:12.5px}
 .actor .stt{font-size:13px;color:var(--ink2);text-align:right}
-.st-blocked .stt,.st-waiting .stt,.st-deadlocked .stt{color:var(--stop);font-weight:700}
-.st-active .stt,.st-reading .stt,.st-eating .stt,.st-writing .stt{color:var(--clear);font-weight:700}
+.st-waiting .stt,.st-deadlocked .stt{color:var(--stop);font-weight:700}
+.st-eating .stt{color:var(--clear);font-weight:700}
 
-/* ---------- race ---------- */
-.lanes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
-.lane{min-width:0}
-.lane{border:2px solid var(--rule);padding:16px;border-radius:2px;transition:border-color .2s}
-.lane.active{border-color:var(--blue)}
+/* ---------- shared ---------- */
 .big{display:block;font-family:var(--display);font-size:46px;font-weight:700;line-height:1.1;margin-top:4px}
-.sub{margin:2px 0 8px;color:var(--ink2);font-size:14px}
-.bar{height:12px;background:var(--soft);border-radius:2px;overflow:hidden}
-.bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .1s linear}
-.lane[data-lane=u] .bar i{background:var(--amber)}
-.verdict{min-height:24px;margin:10px 0 4px;font-weight:700}
-.verdict.bad{color:var(--stop)} .verdict.good{color:var(--clear)}
-.chips{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px;font-size:14px}
-.chips li{padding:4px 8px;background:var(--wash-amber);border-radius:2px}
-.chips li span{color:var(--ink2)}
-.tracks{margin-top:18px;display:grid;gap:5px}
-.track{display:grid;grid-template-columns:70px 1fr 54px;gap:8px;align-items:center;font-size:12.5px;color:var(--ink2)}
-.track .bar{height:7px}
-
-/* ---------- producer-consumer / readers-writers ---------- */
-.pc-grid,.rw-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:22px}
-.slots{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px}
-.slot{width:70px;height:46px;border:2px solid var(--ink);border-radius:2px;display:grid;place-items:center;font:12px var(--mono);background:var(--field);color:var(--ink2)}
-.slot.full{background:var(--wash-blue);color:var(--ink);font-weight:700;border-color:var(--blue)}
-.flow{font-size:14px;color:var(--ink2);margin:6px 0}
-.resource{border:3px solid var(--ink);padding:16px 12px;text-align:center;background:var(--field);transition:background .15s,border-color .15s}
-.resource.reading{background:var(--wash-clear);border-color:var(--clear)}
-.resource.writing{background:var(--wash-amber);border-color:var(--amber)}
-.resource .rs{font-family:var(--display);font-size:22px;font-weight:700;margin:4px 0}
-.resource .data{margin:0;font:13.5px var(--mono);color:var(--ink2)}
-.rc,.viol{margin:10px 0 0;font-size:14px}
-.viol{font-weight:700;color:var(--clear)} .viol.bad{color:var(--stop);background:var(--wash-stop);padding:3px 6px}
 
 /* ---------- dining ---------- */
 .dining{display:grid;grid-template-columns:minmax(260px,420px) minmax(230px,1fr);gap:22px;align-items:start}
@@ -212,7 +182,7 @@ table.summary .linklike{background:none;border:0;color:var(--blue);padding:0;fon
 
 @media (max-width:1100px){
   .workspace,.play{grid-template-columns:1fr}
-  .pc-grid,.rw-grid,.dining{grid-template-columns:1fr}
+  .dining{grid-template-columns:1fr}
 }
 @media (max-width:860px){
   .shell{grid-template-columns:minmax(0,1fr)}
@@ -228,7 +198,6 @@ table.summary .linklike{background:none;border:0;color:var(--blue);padding:0;fon
   .rail-note{display:none}
   .rail-foot{display:flex;align-items:center;padding-top:10px}
   main{padding:20px 16px 50px}
-  .lanes{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 /* ---------- additions: svg colours, replay bar, overlay, overview, playground, theme ---------- */

@@ -2,8 +2,8 @@
 
 An Operating Systems project: a counting semaphore and a binary semaphore written
 from scratch in Python (built only on `threading.Lock` and `threading.Event`),
-used to solve four classic synchronization problems, with a command-line menu, a
-and a browser interface.
+used to solve the **Dining Philosophers problem**, with a command-line menu and a
+browser interface.
 
 ```
 Python 3.9+   |   standard library only   |   no pip install needed
@@ -25,9 +25,11 @@ If `python` is not recognised on Windows, use the Python launcher instead: `py s
 ## 1. Problem statement
 
 Concurrent threads that share data can interleave their instructions in any order.
-Without coordination this produces **race conditions** (lost updates), broken
-invariants (a buffer that overflows, a reader that sees half a write) and
-**deadlock** (everyone waits for someone else forever). The operating system needs a
+Without coordination this produces **race conditions** (lost updates), two threads
+using the same resource at once, and **deadlock** (everyone waits for someone else
+forever). The Dining Philosophers problem is the classic example of deadlock: five
+philosophers share five forks, each needs two forks to eat, and if all five pick up
+their left fork at once, nobody can ever eat. The operating system needs a
 primitive that lets threads **wait without wasting CPU** and be **woken exactly when
 they may continue**. That primitive is the semaphore (Dijkstra, 1965).
 
@@ -35,17 +37,15 @@ they may continue**. That primitive is the semaphore (Dijkstra, 1965).
 
 1. Implement counting and binary semaphores from scratch, without Python's built-in semaphores.
 2. Guarantee mutual exclusion, no lost wake-ups, no busy-waiting, and FIFO fairness.
-3. Demonstrate a race condition and remove it with a semaphore.
-4. Solve Producer-Consumer, Readers-Writers and Dining Philosophers with the custom semaphore.
-5. Detect synchronization failures (violations, deadlock) instead of hanging.
-6. Have every demonstration verify its own results and report PASS, FAIL or DEADLOCK.
+3. Solve the Dining Philosophers problem with the custom semaphore and prevent deadlock with a room semaphore.
+4. Detect deadlock instead of hanging.
+5. Have the demonstration verify its own results and report PASS, FAIL or DEADLOCK.
 
 ## 3. Operating Systems concepts covered
 
-Counting semaphores, binary semaphores, mutual exclusion, critical sections, race
-conditions, atomic operations, blocking and waking threads (no busy-waiting), FIFO
-queues and fairness, producer-consumer (bounded buffer), readers-writers (reader
-preference and starvation), dining philosophers, the four conditions for deadlock
+Counting semaphores, binary semaphores, mutual exclusion, critical sections, atomic
+operations, blocking and waking threads (no busy-waiting), FIFO queues and fairness,
+the dining philosophers problem, the four conditions for deadlock
 (mutual exclusion, hold-and-wait, no pre-emption, circular wait), deadlock prevention
 and detection (room semaphore, watchdog timeout), and the difference between threads
 and processes.
@@ -62,7 +62,7 @@ and processes.
 ```text
 my-semaphore-project/
 ├── api/                      Vercel serverless functions (thin wrappers around webcore.py)
-│   ├── catalog.py            GET  /api/catalog     list of demos and their settings
+│   ├── catalog.py            GET  /api/catalog     the demonstration and its settings
 │   ├── playground.py         POST /api/playground  replay wait()/signal() clicks on a real Semaphore
 │   └── run.py                POST /api/run         run a demo to completion
 ├── public/
@@ -77,10 +77,7 @@ my-semaphore-project/
 │   └── synchronization.py    shared helpers: EventLog, DemoResult, join_threads (watchdog), parameters
 ├── demos/
 │   ├── __init__.py
-│   ├── race_condition.py
-│   ├── producer_consumer.py
-│   ├── readers_writers.py
-│   └── dining_philosophers.py
+│   └── dining_philosophers.py  the Dining Philosophers demonstration
 ├── main.py                   command-line entry point (interactive menu)
 ├── server.py                 run the web interface locally (same API as Vercel)
 ├── webcore.py                the web API: shared by api/*.py and server.py
@@ -90,8 +87,8 @@ my-semaphore-project/
 └── requirements.txt
 ```
 
-Layers: `semaphore.py` knows nothing about demos. Demos use only the semaphore and
-`synchronization.py`. `main.py` and the web interface are two front-ends for the same demos.
+Layers: `semaphore.py` knows nothing about the demonstration. The demonstration uses only the semaphore and
+`synchronization.py`. `main.py` and the web interface are two front-ends for the same demonstration.
 The web page is only a display: all semaphore work happens in Python.
 
 Serverless functions cannot keep threads running between requests, so the web API is
@@ -152,17 +149,24 @@ signal():
 * **`abort()`.** Wakes every blocked thread with `SemaphoreAborted`. Used by the watchdog and when a run is cancelled, so that no thread can ever be left sleeping forever.
 * **Other API:** `value` and `waiting` (read-only properties), `try_wait()`, context-manager support (`with sem:`), `ValueError`/`TypeError` for invalid arguments.
 
-## 7. The four demonstrations
+## 7. The Dining Philosophers demonstration
 
-All four use the custom semaphores. Each one verifies its own claims and reports `PASS`, `FAIL` or `DEADLOCK`.
+`demos/dining_philosophers.py` uses the custom semaphores, verifies its own claims and reports `PASS`, `FAIL` or `DEADLOCK`.
 
-**1. Race condition** (`demos/race_condition.py`). Threads increment a shared counter. `counter += 1` is really READ, ADD, WRITE; if two threads read the same old value, one update is lost. The demo runs the workload unprotected several times (different wrong totals each time) and then once with a `BinarySemaphore` around the read-modify-write (always exactly `threads x increments`).
+Five philosophers sit at a round table with one fork between each pair, so there are five forks, each a `BinarySemaphore(1)`. A philosopher thinks, picks up the left fork, then the right fork, eats, and puts both down.
 
-**2. Producer-Consumer** (`demos/producer_consumer.py`). A bounded buffer with `empty = Semaphore(capacity)`, `full = Semaphore(0)` and `mutex = BinarySemaphore(1)`. Producers block when the buffer is full, consumers when it is empty. Always wait on `empty`/`full` *before* `mutex`, otherwise a thread can sleep while holding the mutex and block everyone. Verified: capacity never exceeded, every item consumed exactly once, buffer empty at the end, semaphores back to their initial values, no deadlock.
+Deadlock needs all four Coffman conditions:
 
-**3. Readers-Writers** (`demos/readers_writers.py`). Readers-preference solution: `mutex` protects `read_count`, `rw` protects the resource; the first reader locks writers out and the last reader lets them in. Several readers may read together; a writer is always alone. Violations are detected by observers (overlap checks plus a torn-read check: writers update two fields in two steps, and a reader that saw them differ would be caught). **This solution prefers readers, so writers can starve** if readers keep arriving. The demo reports the longest time a writer waited.
+* **Mutual exclusion:** a fork is a binary semaphore, so only one philosopher can hold it.
+* **Hold and wait:** a philosopher keeps the left fork while waiting for the right one.
+* **No pre-emption:** a fork cannot be taken away from the philosopher holding it.
+* **Circular wait:** philosopher 0 waits for 1, 1 waits for 2, and so on back to 0.
 
-**4. Dining Philosophers** (`demos/dining_philosophers.py`). Five philosophers, five forks (each a `BinarySemaphore`). A `room = Semaphore(4)` lets at most four philosophers compete for forks at once, so the circular wait can never close and deadlock is impossible. Every blocking wait has a timeout (the watchdog). Switch the room off and all five pick up their left fork, wait for the right one, and the watchdog reports `DEADLOCK` instead of hanging. Verified: no fork held by two philosophers, everyone eats with both forks, everyone completes all meals.
+A `room = Semaphore(4)` lets at most four philosophers compete for forks at once. With four philosophers and five forks, at least one of them can always pick up both forks, so the circular wait can never close and deadlock is impossible.
+
+Every blocking wait has a timeout (the watchdog). Switch the room off and all five pick up their left fork and wait for the right one; the watchdog reports `DEADLOCK`, and each philosopher puts down its fork and stops instead of hanging.
+
+Verified: no fork held by two philosophers, everyone eats with both forks, everyone completes all meals, all forks free at the end, room semaphore back to 4.
 
 ## 8. Running the project
 
@@ -174,9 +178,9 @@ python server.py
 
 The terminal prints `Open: http://localhost:8000` and your browser opens by itself. If it does not, open that address manually. Press **Ctrl+C** in the terminal to stop. Options: `--port 9000` (another port; if 8000 is busy the next free port is used automatically) and `--no-browser`.
 
-Pages: **Overview** (run all four demos with one button), one page per demonstration (change the settings, press Run, watch the semaphores, see the verification checklist), and the **Playground** (operate a real semaphore by hand).
+Pages: **Overview** (**Run both versions** runs the demonstration with and without the room semaphore), **Dining philosophers** (change the settings, press Run, watch the table and the semaphores, see the verification checklist), and the **Playground** (operate a real semaphore by hand).
 
-On each demonstration page: **Run** uses your settings, **Quick run** uses fast settings and shows the result in a second or two, **Reset to defaults** restores the settings, and an estimate of the run time appears under the settings (with a warning if the run would pass the 50-second server limit). After a run you can change the **replay speed** (0.25× to 4×) and press **Replay again** to watch the same run without running it again. The **Theme** button in the sidebar switches between automatic, light and dark colours.
+On the Dining philosophers page: **Run** uses your settings, **Quick run** uses fast settings and shows the result in a second or two, **Reset to defaults** restores the settings, and an estimate of the run time appears under the settings (with a warning if the run would pass the 50-second server limit). After a run you can change the **replay speed** (0.25× to 4×) and press **Replay again** to watch the same run without running it again. The **Theme** button in the sidebar switches between automatic, light and dark colours.
 
 The server listens on this computer only (`127.0.0.1`), accepts only JSON requests and serves only a fixed list of project files.
 
@@ -194,14 +198,15 @@ The project is ready for Vercel as is (no build step, no packages):
 Or from a terminal with the Vercel CLI: `npx vercel --prod`.
 
 `public/index.html` is served as the site, and each file in `api/` becomes a Python
-function. A demo run is limited to 50 seconds (the functions allow 60).
+function. A run is limited to 50 seconds (the functions allow 60).
 
 ### Terminal version
 
 ```bash
-python main.py                  # interactive menu 0-6
-python main.py --all            # all demos, exit code 0 if all pass
-python main.py --demo 4         # one demo (1-4)
+python main.py                  # interactive menu 0-3
+python main.py --all            # with and without the room semaphore, exit code 0 if both behave as expected
+python main.py --demo 1         # with the room semaphore (expected: PASS)
+python main.py --demo 2         # without the room semaphore (expected: DEADLOCK)
 ```
 
 ### In Antigravity, VS Code or any editor
@@ -216,39 +221,34 @@ The page needs the Python backend to run the semaphores. Opened as a plain file 
 
 Everything in this section was **captured from real runs** while this project was built (Linux, Python 3.13). Timings and the unprotected counter values will be different on your computer; that is expected.
 
-Producer-Consumer, `python main.py --demo 2 --quiet`:
+With the room semaphore, `python main.py --demo 1 --quiet`:
 
 ```text
 ============================================================
-  Demo 2: Producer-Consumer
+  Dining Philosophers: With the room semaphore
 ============================================================
-  Producers put items into a bounded buffer, consumers take them out. empty/full counting semaphores block producers on a full buffer and consumers on an empty one; a binary mutex protects the buffer itself.
+  Five philosophers need two forks each. Forks are binary semaphores; a 'room' semaphore admits at most four philosophers at a time, which makes deadlock impossible. Switch the room off to see all five deadlock.
+  Expected result: PASS
 
 
   --- Verification ----------------------------------------
-  [ok  ] No deadlock - all threads finished  (all finished)
-  [ok  ] Buffer never exceeded its capacity  (max size 4 <= capacity 4)
-  [ok  ] Consumers never found an empty buffer after full.wait()
-  [ok  ] Every produced item was consumed  (45 consumed / 45 produced)
-  [ok  ] No item consumed twice
-  [ok  ] Buffer empty at the end
-  [ok  ] Semaphores back to initial values  (empty=4 (=4), full=0 (=0), mutex=1 (=1))
-  [info] Producers blocked on a full buffer  (29 time(s))
-  [info] Consumers blocked on an empty buffer  (21 time(s))
+  [ok  ] The table never deadlocked  (watchdog stayed silent)
+  [ok  ] No fork was ever held by two philosophers at once  (0 violations)
+  [ok  ] Every philosopher ate with both forks
+  [ok  ] Every philosopher completed all required meals  (meals eaten: [3, 3, 3, 3, 3])
+  [ok  ] All forks free at the end
+  [ok  ] Room semaphore back to 4  (value 4)
 
   --- Statistics ------------------------------------------
-  items_planned                45
-  items_produced               45
-  items_consumed               45
-  max_buffer_size              4
-  capacity                     4
-  producer_blocks              29
-  consumer_blocks              21
+  meals_eaten                  [3, 3, 3, 3, 3]
+  meals_required               3
+  room_semaphore               True
+  fork_violations              0
 
-  RESULT: PASS   (0.01s)
+  RESULT: PASS   (0.02s)
 ```
 
-Dining Philosophers with the room semaphore switched off (watchdog 1 second):
+Without the room semaphore, `python main.py --demo 2 --quiet` (watchdog 3 seconds):
 
 ```text
   --- Verification ----------------------------------------
@@ -265,50 +265,22 @@ Dining Philosophers with the room semaphore switched off (watchdog 1 second):
   fork_violations              0
   note: The room semaphore was switched OFF on purpose to demonstrate deadlock.
 
-  RESULT: DEADLOCK   (1.10s)
+  RESULT: DEADLOCK   (3.10s)
 ```
 
-Race condition, `python main.py --demo 1 --quiet` (note how the unprotected totals differ from run to run):
-
-```text
-============================================================
-  Demo 1: Race Condition
-============================================================
-  Several threads increment one shared counter. Without a semaphore, increments are lost and the result changes from run to run. A BinarySemaphore around the critical section makes it exact.
-
-
-  --- Verification ----------------------------------------
-  [ok  ] Protected counter equals threads x increments  (80000 vs expected 80000)
-  [ok  ] Protected run lost no updates
-  [info] Race observed without the semaphore  (lost 54908 updates in the worst run; results [25664, 25092, 30036])
-  [info] Unprotected results differ between runs  ([25092, 25664, 30036])
-
-  --- Statistics ------------------------------------------
-  expected                     80000
-  unprotected_results          [25664, 25092, 30036]
-  unprotected_lost_updates     [54336, 54908, 49964]
-  protected_result             80000
-  protected_lost_updates       0
-  note: The unprotected result varies because the OS scheduler decides when a thread is interrupted between its READ and its WRITE.
-
-  RESULT: PASS   (2.81s)
-```
-
-All demonstrations, `python main.py --all --quiet`:
+Both versions, `python main.py --all --quiet`:
 
 ```text
   FINAL SUMMARY
 ============================================================
-  Demonstration           Result          Time
-  --------------------------------------------
-  Race Condition          PASS           2.18s
-  Producer-Consumer       PASS           0.01s
-  Readers-Writers         PASS           0.08s
-  Dining Philosophers     PASS           0.02s
-  --------------------------------------------
-  4 of 4 demonstrations passed.
+  Version                       Result      Expected        Time
+  --------------------------------------------------------------
+  With the room semaphore       PASS        PASS           0.02s
+  Without the room semaphore    DEADLOCK    DEADLOCK       3.10s
+  --------------------------------------------------------------
+  Both versions behaved as expected.
 
-  Total time: 2.3s
+  Total time: 3.1s
 ```
 
 The terminal menu looks like this (literal layout, not captured output):
@@ -316,13 +288,12 @@ The terminal menu looks like this (literal layout, not captured output):
 ```text
 ========================================
    SEMAPHORE SYNCHRONIZATION PROJECT
+       Dining Philosophers Problem
 ========================================
 
-1. Race Condition
-2. Producer-Consumer
-3. Readers-Writers
-4. Dining Philosophers
-5. Run All Demonstrations
+1. With the room semaphore (deadlock prevented)
+2. Without the room semaphore (deadlock detected)
+3. Run both
 0. Exit
 
 Enter your choice:
@@ -332,24 +303,23 @@ Enter your choice:
 
 Python **threads** inside one program **share memory**, and this semaphore coordinates exactly such threads: its counter and queue are ordinary Python objects protected by a `threading.Lock`.
 
-Separate operating-system **processes** do **not** share memory. A `Semaphore` object created in one process is a different object in another process, so **this implementation does not synchronize separate processes**. To coordinate processes you need an inter-process mechanism: for example `multiprocessing.Semaphore`, named semaphores or shared memory provided by the OS, or file or socket based locks. The *ideas* in this project (counter, queue, hand-off, the classic problems) carry over unchanged; the storage and the lock underneath would have to live in shared OS memory.
+Separate operating-system **processes** do **not** share memory. A `Semaphore` object created in one process is a different object in another process, so **this implementation does not synchronize separate processes**. To coordinate processes you need an inter-process mechanism: for example `multiprocessing.Semaphore`, named semaphores or shared memory provided by the OS, or file or socket based locks. The *ideas* in this project (counter, queue, hand-off, the Dining Philosophers solution) carry over unchanged; the storage and the lock underneath would have to live in shared OS memory.
 
-A note on the GIL: CPython's global interpreter lock lets only one thread run Python bytecode at a time, but it can switch threads **between** the bytecodes of `counter += 1`. The GIL therefore does not make `counter += 1` safe. The race condition demo shows exactly that.
+A note on the GIL: CPython's global interpreter lock lets only one thread run Python bytecode at a time, but it can switch threads **between** the bytecodes of `counter += 1`. The GIL therefore does not make shared data safe, and real synchronization is still needed.
 
 ## 11. Known limitations
 
-* **Threads, not processes** (see section 11).
+* **Threads, not processes** (see section 10).
 * **Python-level semaphore.** It is built from `Lock` and `Event`, which themselves rely on the operating system. A kernel semaphore (futex-based) is faster; this project optimises for clarity and correctness.
-* **The race window is widened on purpose.** CPython switches threads only every few milliseconds, and the READ-WRITE gap is a few nanoseconds wide, so on its own the race would appear rarely. The race demo therefore makes a thread give up the CPU between its READ and its WRITE with a small random probability (`PREEMPT_CHANCE` in `race_condition.py`). This models "the scheduler may interrupt here". The protected run uses the same interruption and is still exact. The actual numbers of lost updates depend on this setting and on your computer.
-* **Demo pauses are simulated work.** Thinking, eating, reading and producing use short sleeps to model time passing. They are never used to make synchronization correct.
-* **Readers-Writers prefers readers**, so writers can starve. A writers-preference or fair version is a possible extension.
+* **Demo pauses are simulated work.** Thinking and eating use short sleeps to model time passing. They are never used to make synchronization correct.
+* **One prevention strategy.** The room semaphore lets at most four philosophers sit down, so a philosopher may wait for a seat even when both of its forks are free.
 * **Not run on Windows** by the author of this build (see section 4).
 * **The browser replays a sampled recording.** Each run is executed to completion on the server while the state is sampled every 0.1 s, then animated in the browser. Very short states between two samples may not be visible, and the animation starts only after the run has finished.
 
 ## 12. Future enhancements
 
 * A multi-process version using `multiprocessing` shared memory with OS-level semaphores, to compare with the thread version.
-* Writers-preference and fair (no starvation) readers-writers locks.
+* Other ways to prevent deadlock at the table, such as numbering the forks and always picking up the lower-numbered fork first, compared with the room semaphore.
 * Condition variables and monitors as an alternative to semaphores, compared side by side.
 * Priority inheritance, and a demonstration of priority inversion.
 * Deadlock detection using a resource-allocation graph, and the banker's algorithm for avoidance.
