@@ -6,7 +6,7 @@
   "functions": {
     "api/*.py": {
       "maxDuration": 60,
-      "includeFiles": "{webcore.py,accounts.py,src/**,demos/**}"
+      "includeFiles": "{webcore.py,src/**,demos/**}"
     }
   },
   "headers": [

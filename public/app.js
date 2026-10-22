@@ -219,7 +219,6 @@ const NAV = [
   {id: 'readers_writers', label: 'Readers-writers'},
   {id: 'dining_philosophers', label: 'Dining philosophers'},
   {id: 'playground', label: 'Playground', gap: true},
-  {id: 'account', label: 'Account', gap: true},
 ];
 
 function show(id, fromHistory) {
@@ -231,7 +230,6 @@ function show(id, fromHistory) {
   $$('.station').forEach(b => { if (b.dataset.id === id) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (location.hash !== '#' + id) history[fromHistory ? 'replaceState' : 'pushState'](null, '', '#' + id);
   if (id === 'playground') Playground.refresh();
-  if (id === 'account') Account.open();
   window.scrollTo(0, 0);
   if (!fromHistory || App.ready) { const h = $('#view-' + id + ' h2'); if (h) { h.setAttribute('tabindex', '-1'); h.focus({preventScroll: true}); } }
 }
@@ -299,10 +297,6 @@ function buildDemoView(meta) {
   q('stop').addEventListener('click', () => { if (v.ctrl) v.ctrl.abort(); q('stop').disabled = true; });
   q('quick').addEventListener('click', () => startDemo(v, true));
   q('again').addEventListener('click', () => replayAgain(v));
-  sec.addEventListener('click', e => {
-    if (e.target.closest('[data-save]')) saveResult(v, e.target.closest('[data-save]'));
-    if (e.target.closest('[data-goto-account]')) show('account');
-  });
   q('defaults').addEventListener('click', () => {
     meta.params.forEach(p => {
       const i = $(`input[name="${p.name}"]`, sec);
@@ -361,7 +355,6 @@ async function startDemo(v, quick) {
   }, 1000);
   try {
     const params = quick ? quickParams(v.meta) : collectParams($('form', v.el));
-    v.lastParams = params; v.lastResult = null; renderSaveRow(v);
     const d = await post('/api/run', {demo: v.meta.id, params, record: true}, ctrl.signal);
     clearInterval(tick); pend.hidden = true;
     if (v.runId !== runId) return;
@@ -436,8 +429,7 @@ function showResult(v, r) {
   setBadge(v, cls, r.status === 'PASS' ? 'Passed' : r.status === 'DEADLOCK' ? 'Deadlock' : r.status === 'CANCELLED' ? 'Stopped' : 'Failed');
   const items = r.checks.map(c => `<li class="${c.info ? 'info' : c.ok ? 'ok' : 'bad'}"><span class="tag">${c.info ? 'Note' : c.ok ? 'Pass' : 'Fail'}</span><span>${esc(c.name)}${c.detail ? `<span class="d">${esc(c.detail)}</span>` : ''}</span></li>`).join('');
   const stats = Object.entries(r.stats).map(([k, val]) => `<dt>${esc(k.replace(/_/g, ' '))}</dt><dd>${esc(Array.isArray(val) ? val.map(fmt).join(', ') : typeof val === 'number' ? fmt(val) : String(val))}</dd>`).join('');
-  q('verify').innerHTML = `<h3>Verification (${r.duration.toFixed(2)} s)</h3><ul>${items}</ul><dl class="stats">${stats}</dl>${r.notes.map(n => `<p class="muted">${esc(n)}</p>`).join('')}<div class="save-row" data-k="save"></div>`;
-  v.lastResult = r; v.saved = false; renderSaveRow(v);
+  q('verify').innerHTML = `<h3>Verification (${r.duration.toFixed(2)} s)</h3><ul>${items}</ul><dl class="stats">${stats}</dl>${r.notes.map(n => `<p class="muted">${esc(n)}</p>`).join('')}`;
 }
 
 /* ------------------------------- event log ------------------------------- */
@@ -590,220 +582,6 @@ const Playground = {
   }
 };
 
-/* -------------------------------- account -------------------------------- */
-const Account = {
-  mode: 'signin', notice: '', recovery: null, runs: null, loadingRuns: false,
-  build() {
-    const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'view-account';
-    sec.innerHTML = `<header class="vhead"><h2 tabindex="-1">Account</h2><p class="lede">An account is optional. It only lets you keep demonstration results you choose to save. Every demonstration and the Playground work without one.</p></header>
-      <div id="acct" aria-live="polite"></div>`;
-    $('#main').appendChild(sec);
-    sec.addEventListener('click', e => this.onClick(e));
-    sec.addEventListener('submit', e => { e.preventDefault(); this.onSubmit(e.target); });
-    sec.addEventListener('input', e => {                       // clear a field's error once it is edited
-      const i = e.target; if (!i.name) return;
-      i.removeAttribute('aria-invalid'); const slot = $('#err-' + i.name, sec); if (slot) slot.textContent = '';
-    });
-  },
-  open() { this.render(); if (App.auth.user && this.runs === null) this.loadRuns(); },
-  set(mode, notice) { this.mode = mode; this.notice = notice || ''; this.render(); },
-  field(name, label, type, auto, extra) {
-    return `<label class="f wide">${label}<input name="${name}" type="${type}" autocomplete="${auto}" ${extra || ''} aria-describedby="err-${name}"><span class="ferr" id="err-${name}"></span></label>`;
-  },
-  render() {
-    const el = $('#acct'); if (!el) return;
-    const note = this.notice ? `<p class="notice" role="status">${esc(this.notice)}</p>` : '';
-    if (!App.auth.configured) {
-      el.innerHTML = `<div class="panel"><h3>Accounts are not switched on yet</h3><p class="muted">The site owner has not connected the account service on this deployment. Everything else on the site works normally.</p></div>`;
-      return;
-    }
-    if (this.recovery) {
-      el.innerHTML = `${note}<form class="panel aform" novalidate data-form="reset"><h3>Choose a new password</h3>
-        ${this.field('password', 'New password (at least 8 characters)', 'password', 'new-password', 'minlength="8" maxlength="72" required')}
-        ${this.field('confirm', 'Repeat the new password', 'password', 'new-password', 'required')}
-        <p class="form-err" role="alert"></p><button class="btn primary" type="submit">Save new password</button></form>`;
-      return;
-    }
-    if (App.auth.user) {
-      el.innerHTML = `${note}<div class="panel"><div class="acct-head"><p>Signed in as <b>${esc(App.auth.user.email)}</b></p>
-          <button type="button" class="btn" data-act="logout">Sign out</button></div></div>
-        <section class="panel"><div class="acct-head"><h3>Saved results</h3><button type="button" class="btn" data-act="delete-runs" ${this.runs && this.runs.length ? '' : 'disabled'}>Delete all saved results</button></div>
-          <div id="runsBox">${this.runsHtml()}</div></section>
-        <form class="panel aform danger-zone" novalidate data-form="delete"><h3>Delete account</h3>
-          <p class="muted">This permanently deletes your account, your email address and every saved result. It cannot be undone.</p>
-          ${this.field('password', 'Enter your password to confirm', 'password', 'current-password', 'required')}
-          <p class="form-err" role="alert"></p><button class="btn danger" type="submit">Delete my account</button></form>`;
-      return;
-    }
-    if (this.mode === 'check-email') {
-      el.innerHTML = `<div class="panel"><h3>Check your email</h3><p>${esc(this.notice)}</p><p><button type="button" class="linklike" data-mode="signin">Back to sign in</button></p></div>`;
-      return;
-    }
-    const tabs = `<div class="tabs acct-tabs" role="tablist"><button type="button" role="tab" data-mode="signin" aria-selected="${this.mode === 'signin'}" class="${this.mode === 'signin' ? 'on' : ''}">Sign in</button><button type="button" role="tab" data-mode="signup" aria-selected="${this.mode === 'signup'}" class="${this.mode === 'signup' ? 'on' : ''}">Create account</button></div>`;
-    if (this.mode === 'recover') {
-      el.innerHTML = `${note}<form class="panel aform" novalidate data-form="recover"><h3>Reset your password</h3>
-        <p class="muted">Enter the email address of your account. If it exists, we will send a link to choose a new password.</p>
-        ${this.field('email', 'Email address', 'email', 'email', 'required')}
-        <p class="form-err" role="alert"></p><button class="btn primary" type="submit">Send reset link</button>
-        <p><button type="button" class="linklike" data-mode="signin">Back to sign in</button></p></form>`;
-      return;
-    }
-    if (this.mode === 'signup') {
-      el.innerHTML = `${note}${tabs}<form class="panel aform" novalidate data-form="signup">
-        ${this.field('email', 'Email address', 'email', 'email', 'required')}
-        ${this.field('password', 'Password (at least 8 characters)', 'password', 'new-password', 'minlength="8" maxlength="72" required')}
-        ${this.field('confirm', 'Repeat the password', 'password', 'new-password', 'required')}
-        <label class="f chk"><input type="checkbox" name="agree" aria-describedby="err-agree"><span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms of service</a> and the <a href="/privacy" target="_blank" rel="noopener">Privacy policy</a>.</span></label><span class="ferr" id="err-agree"></span>
-        <label class="f chk"><input type="checkbox" name="age" aria-describedby="err-age"><span>I am 18 or older.</span></label><span class="ferr" id="err-age"></span>
-        <p class="muted small">Under 18? Please do not create an account. You can use every demonstration without one, and nothing about you is stored.</p>
-        <p class="form-err" role="alert"></p><button class="btn primary" type="submit">Create account</button></form>`;
-      return;
-    }
-    el.innerHTML = `${note}${tabs}<form class="panel aform" novalidate data-form="signin">
-      ${this.field('email', 'Email address', 'email', 'email', 'required')}
-      ${this.field('password', 'Password', 'password', 'current-password', 'required')}
-      <p class="form-err" role="alert"></p><button class="btn primary" type="submit">Sign in</button>
-      <p><button type="button" class="linklike" data-mode="recover">Forgot your password?</button></p></form>`;
-  },
-  runsHtml() {
-    if (this.loadingRuns || this.runs === null) return `<div aria-busy="true" aria-label="Loading saved results">${'<div class="skel skel-row"></div>'.repeat(3)}</div>`;
-    if (!this.runs.length) return `<div class="empty-state"><p><b>No saved results yet.</b></p><p class="muted">Run a demonstration, then press <i>Save this result</i> under its verification list.</p><button type="button" class="btn" data-goto="race">Open the first demonstration</button></div>`;
-    const title = id => (App.demos.find(d => d.id === id) || {title: id}).title;
-    return `<table class="summary runs"><thead><tr><th>Demonstration</th><th>Result</th><th>Time</th><th>Saved</th><th><span class="sr">Actions</span></th></tr></thead><tbody>${this.runs.map(r => {
-      const [cls, text] = BADGE[r.status] || BADGE.FAIL;
-      return `<tr><td>${esc(title(r.demo))}<small class="muted block">${esc(r.summary || '')}</small></td><td><span class="badge ${cls}">${text}</span></td><td>${Number(r.duration).toFixed(2)} s</td><td>${esc(new Date(r.created_at).toLocaleString())}</td><td><button type="button" class="linklike" data-del="${r.id}">Delete</button></td></tr>`;
-    }).join('')}</tbody></table>`;
-  },
-  async loadRuns() {
-    this.loadingRuns = true; this.render();
-    try { const d = await api('/api/account'); this.runs = d.runs; }
-    catch (e) { this.runs = null; this.notice = e.message; if (e.status === 401) setUser(null); }
-    finally { this.loadingRuns = false; this.render(); }
-  },
-  async onClick(e) {
-    const t = e.target.closest('button'); if (!t) return;
-    if (t.dataset.mode) return this.set(t.dataset.mode);
-    if (t.dataset.goto) return show(t.dataset.goto);
-    if (t.dataset.act === 'logout') {
-      t.disabled = true; t.textContent = 'Signing out...';
-      try { await post('/api/auth', {action: 'logout'}); } catch (err) { /* the cookies are cleared either way */ }
-      setUser(null); this.runs = null; this.set('signin', 'You are signed out.');
-    }
-    if (t.dataset.act === 'delete-runs') {
-      if (!confirm('Delete all of your saved results? This cannot be undone.')) return;
-      t.disabled = true;
-      try { const d = await post('/api/account', {action: 'delete_runs'}); this.runs = []; this.set('', `Deleted ${d.deleted} saved result${d.deleted === 1 ? '' : 's'}.`); }
-      catch (err) { this.set('', err.message); }
-    }
-    if (t.dataset.del) {
-      if (!confirm('Delete this saved result?')) return;
-      t.disabled = true;
-      try { await post('/api/account', {action: 'delete_run', id: Number(t.dataset.del)}); this.runs = this.runs.filter(r => String(r.id) !== t.dataset.del); this.set('', 'The result was deleted.'); }
-      catch (err) { this.set('', err.message); }
-    }
-  },
-  /* Form validation with a clear message next to each field. */
-  check(form, rules) {
-    let ok = true;
-    $$('.ferr', form).forEach(s => { s.textContent = ''; });
-    $$('input', form).forEach(i => i.removeAttribute('aria-invalid'));
-    for (const [name, test, msg] of rules) {
-      const input = form.elements[name];
-      if (!test(input)) {
-        ok = false; input.setAttribute('aria-invalid', 'true');
-        const slot = $('#err-' + name, form); if (slot && !slot.textContent) slot.textContent = msg;
-      }
-    }
-    const first = $('[aria-invalid=true]', form); if (first) first.focus();
-    return ok;
-  },
-  async onSubmit(form) {
-    const kind = form.dataset.form, f = form.elements, errBox = $('.form-err', form), btn = $('button[type=submit]', form);
-    const EMAIL = i => /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(i.value.trim());
-    const PW = i => i.value.length >= 8 && i.value.length <= 72;
-    const rules = {
-      signin: [['email', EMAIL, 'Enter a valid email address, like name@example.com.'], ['password', i => i.value.length > 0, 'Enter your password.']],
-      signup: [['email', EMAIL, 'Enter a valid email address, like name@example.com.'], ['password', PW, 'Use 8 to 72 characters.'],
-        ['confirm', i => i.value === f.password.value && i.value !== '', 'The two passwords do not match.'],
-        ['agree', i => i.checked, 'You need to accept the terms to create an account.'], ['age', i => i.checked, 'Accounts are for people aged 18 or older.']],
-      recover: [['email', EMAIL, 'Enter a valid email address, like name@example.com.']],
-      reset: [['password', PW, 'Use 8 to 72 characters.'], ['confirm', i => i.value === f.password.value && i.value !== '', 'The two passwords do not match.']],
-      delete: [['password', i => i.value.length > 0, 'Enter your password to confirm.']],
-    }[kind];
-    errBox.textContent = '';
-    if (!this.check(form, rules)) return;
-    if (kind === 'delete' && !confirm('Permanently delete your account and all saved results?')) return;
-    const label = btn.textContent; btn.disabled = true;
-    btn.textContent = {signin: 'Signing in...', signup: 'Creating account...', recover: 'Sending...', reset: 'Saving...', delete: 'Deleting...'}[kind];
-    try {
-      if (kind === 'signin') {
-        const d = await post('/api/auth', {action: 'login', email: f.email.value.trim(), password: f.password.value});
-        setUser(d.user); this.runs = null; this.notice = ''; this.open();
-      } else if (kind === 'signup') {
-        const d = await post('/api/auth', {action: 'signup', email: f.email.value.trim(), password: f.password.value, agree_terms: f.agree.checked, age_ok: f.age.checked});
-        if (d.user) { setUser(d.user); this.runs = []; this.set('', 'Your account is ready.'); }
-        else this.set('check-email', `We sent a confirmation link to ${f.email.value.trim()}. Open it on this device to finish creating your account. It may take a minute to arrive; check your spam folder too.`);
-      } else if (kind === 'recover') {
-        await post('/api/auth', {action: 'recover', email: f.email.value.trim()});
-        this.set('check-email', 'If an account exists for that address, a reset link is on its way. The link works once and expires after one hour.');
-      } else if (kind === 'reset') {
-        const d = await post('/api/auth', {action: 'reset', password: f.password.value, ...this.recovery});
-        this.recovery = null; setUser(d.user); this.runs = null; this.notice = 'Your new password is saved and you are signed in.'; this.open();
-      } else if (kind === 'delete') {
-        await post('/api/account', {action: 'delete_account', password: f.password.value});
-        setUser(null); this.runs = null; this.set('signin', 'Your account and all of its data were deleted.');
-      }
-    } catch (e) {
-      errBox.textContent = e.message;
-      if (e.status === 401 && kind === 'delete') { /* wrong password: keep the form */ }
-    } finally { if (document.body.contains(btn)) { btn.disabled = false; btn.textContent = label; } }
-  },
-};
-
-function setUser(user) {
-  App.auth.user = user;
-  const w = $('#whoLine');
-  if (w) { w.hidden = !user; w.textContent = user ? `Signed in as ${user.email}` : ''; }
-  Object.values(App.views).forEach(renderSaveRow);
-}
-
-/* "Save this result" under a finished demonstration. */
-function renderSaveRow(v) {
-  const box = $('[data-k=save]', v.el);
-  if (!box) return;
-  if (!App.auth.configured || !v.lastResult || v.lastResult.status === 'CANCELLED') { box.innerHTML = ''; return; }
-  if (!App.auth.user) { box.innerHTML = `<p class="muted small">Want to keep this result? <button type="button" class="linklike" data-goto-account>Sign in or create an account</button> (optional).</p>`; return; }
-  if (v.saved) { box.innerHTML = `<p class="small saved-ok">Saved to your account.</p>`; return; }
-  box.innerHTML = `<button type="button" class="btn" data-save>Save this result</button><span class="small save-msg" role="status"></span>`;
-}
-
-async function saveResult(v, btn) {
-  const r = v.lastResult; btn.disabled = true; btn.textContent = 'Saving...';
-  try {
-    await post('/api/account', {action: 'save_run', demo: v.meta.id, status: r.status, duration: r.duration,
-      params: v.lastParams || {}, summary: FACTS[v.meta.id] ? FACTS[v.meta.id](r.stats).slice(0, 480) : ''});
-    v.saved = true; Account.runs = null; renderSaveRow(v);
-  } catch (e) {
-    btn.disabled = false; btn.textContent = 'Save this result';
-    const m = $('.save-msg', v.el); if (m) m.textContent = e.message;
-    if (e.status === 401) setUser(null);
-  }
-}
-
-/* --------------------- links from emails (confirm / reset) --------------------- */
-async function handleAuthLink() {
-  const h = location.hash.slice(1);
-  if (!/(^|&)(access_token|error_description)=/.test(h)) return false;
-  const p = new URLSearchParams(h);
-  history.replaceState(null, '', location.pathname + '#account');
-  if (p.get('error_description')) { Account.notice = 'This email link has expired or was already used. Please request a new one.'; return true; }
-  const tokens = {access_token: p.get('access_token'), refresh_token: p.get('refresh_token'), expires_in: Number(p.get('expires_in')) || 3600};
-  if (p.get('type') === 'recovery') { Account.recovery = tokens; return true; }
-  try { const d = await post('/api/auth', {action: 'session', ...tokens}); setUser(d.user); Account.notice = 'Your email address is confirmed and you are signed in.'; }
-  catch (e) { Account.notice = e.message; }
-  return true;
-}
-
 /* ------------------------- consent and error reports ------------------------- */
 const Consent = {
   get() { try { return JSON.parse(localStorage.getItem('semlab-consent') || 'null'); } catch (e) { return null; } },
@@ -837,7 +615,7 @@ const Intro = {
   steps: [
     ['Welcome to Semaphore Lab', '<p>This site shows a counting semaphore written from scratch in Python, built only from a lock and an event, and uses it to solve four classic synchronization problems.</p><p>Everything you see is produced by the real Python code running on the server.</p>'],
     ['Watch a demonstration', '<p>Pick a problem in the menu, for example <b>Race condition</b>, and press <b>Run</b>. The threads run on the server, then the page replays what they did at the real speed.</p><p>The <b>Verification</b> panel lists every property that was checked.</p>'],
-    ['Try it yourself', '<p>In the <b>Playground</b> you call <code>wait()</code> and <code>signal()</code> by hand and watch the queue.</p><p>An account is optional. It only lets you keep results you choose to save.</p>'],
+    ['Try it yourself', '<p>In the <b>Playground</b> you call <code>wait()</code> and <code>signal()</code> by hand and watch the queue.</p>'],
   ],
   done() { try { return localStorage.getItem('semlab-onboarded') === '1'; } catch (e) { return true; } },
   finish() { try { localStorage.setItem('semlab-onboarded', '1'); } catch (e) { /* private mode */ } },
@@ -878,25 +656,17 @@ function setupTheme() {
 /* ---------------------------------- boot ---------------------------------- */
 async function boot() {
   if (location.protocol === 'file:') return fatal('This page was opened as a file, but it needs the Python backend to run the semaphores.');
-  App.auth = {configured: false, user: null};
-  let auth;
-  try { [App.demos, auth] = await Promise.all([api('/api/catalog'), api('/api/auth').catch(() => ({configured: false, user: null}))]); }
+  try { App.demos = await api('/api/catalog'); }
   catch (e) { return fatal(e.message); }
-  App.auth.configured = !!auth.configured;
   $('#bootSkel').remove();
   $('#stations').innerHTML = NAV.map(n => `<li class="${n.gap ? 'gap' : ''}"><button class="station" data-id="${n.id}">${esc(n.label)}</button></li>`).join('');
   $('#stations').addEventListener('click', e => { const b = e.target.closest('.station'); if (b) show(b.dataset.id); });
   setupTheme();
   buildOverview();
   App.demos.forEach(buildDemoView);
-  Playground.build(); Account.build();
-  setUser(auth.user || null);
-  const fromEmail = await handleAuthLink();
-  window.addEventListener('popstate', async () => {
-    if (await handleAuthLink()) { Account.render(); show('account', true); return; }   // email link opened in this tab
-    show(location.hash.slice(1), true);
-  });
-  show(fromEmail ? 'account' : (location.hash.slice(1) || 'overview'), true);
+  Playground.build();
+  window.addEventListener('popstate', () => show(location.hash.slice(1), true));
+  show(location.hash.slice(1) || 'overview', true);
   App.ready = true;
   Consent.setup(); Intro.setup();
   if (Consent.get()) Intro.maybeStart();

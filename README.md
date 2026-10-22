@@ -65,18 +65,13 @@ my-semaphore-project/
 │   ├── catalog.py            GET  /api/catalog     list of demos and their settings
 │   ├── playground.py         POST /api/playground  replay wait()/signal() clicks on a real Semaphore
 │   ├── run.py                POST /api/run         run a demo to completion
-│   ├── auth.py               /api/auth             sign up, sign in, sign out, password reset
-│   ├── account.py            /api/account          saved results, delete account
 │   └── errors.py             POST /api/errors      browser error reports (only with consent)
 ├── public/
 │   ├── index.html            the browser interface (plain HTML, CSS and JavaScript, no libraries)
 │   ├── app.js, styles.css    its script and styles
 │   ├── privacy.html, terms.html, cookies.html, refunds.html, 404.html
 │   └── favicon.svg, theme.js
-├── accounts.py               Supabase Auth and database calls (keys stay on the server)
-├── supabase/schema.sql       table, row level security and limits for saved results
-├── docs/                     SETUP_ACCOUNTS.md (switching accounts on), LAUNCH_CHECKLIST.md
-├── .github/workflows/        db-backup.yml (nightly encrypted database backup)
+├── docs/                     LAUNCH_CHECKLIST.md (privacy, consent, accessibility, security)
 ├── src/
 │   ├── __init__.py
 │   ├── semaphore.py          Semaphore and BinarySemaphore (the heart of the project)
@@ -180,18 +175,14 @@ python server.py
 
 The terminal prints `Open: http://localhost:8000` and your browser opens by itself. If it does not, open that address manually. Press **Ctrl+C** in the terminal to stop. Options: `--port 9000` (another port; if 8000 is busy the next free port is used automatically) and `--no-browser`.
 
-Pages: **Overview** (run all four demos with one button), one page per demonstration (change the settings, press Run, watch the semaphores, see the verification checklist), **Playground** (operate a real semaphore by hand), and an optional **Account** page.
+Pages: **Overview** (run all four demos with one button), one page per demonstration (change the settings, press Run, watch the semaphores, see the verification checklist), and the **Playground** (operate a real semaphore by hand).
 
 On each demonstration page: **Run** uses your settings, **Quick run** uses fast settings and shows the result in a second or two, **Reset to defaults** restores the settings, and an estimate of the run time appears under the settings (with a warning if the run would pass the 50-second server limit). After a run you can change the **replay speed** (0.5× to 4×) and press **Replay again** to watch the same run without running it again. The **Theme** button in the sidebar switches between automatic, light and dark colours.
 
 The server listens on this computer only (`127.0.0.1`), accepts only JSON requests and serves only a fixed list of project files.
 
-### Accounts (optional)
-
-Accounts only let visitors keep results they choose to save; everything else works without
-them. They are switched off until four environment variables are set in Vercel. The steps are in
-[`docs/SETUP_ACCOUNTS.md`](docs/SETUP_ACCOUNTS.md), and the status of every launch item
-(privacy, consent, accessibility, security) is in [`docs/LAUNCH_CHECKLIST.md`](docs/LAUNCH_CHECKLIST.md).
+The status of every launch item (privacy, consent, accessibility, security) is in
+[`docs/LAUNCH_CHECKLIST.md`](docs/LAUNCH_CHECKLIST.md).
 
 ### Deploy on Vercel
 

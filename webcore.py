@@ -184,10 +184,9 @@ import hashlib  # noqa: E402
 import json  # noqa: E402
 import secrets  # noqa: E402
 
-import accounts  # noqa: E402
 
 LIMITS = {                     # requests per minute per client
-    "run": 30, "playground": 120, "auth": 10, "account": 40, "errors": 10, "default": 240,
+    "run": 30, "playground": 120, "errors": 10, "default": 240,
 }
 _SALT = secrets.token_bytes(16)           # per process: raw IP addresses are never stored
 _HITS: Dict[Tuple[str, str], collections.deque] = {}
@@ -227,8 +226,7 @@ def log_event(level: str, **fields: Any) -> str:
 Result = Tuple[int, Any, List[str]]
 
 
-def dispatch(method: str, path: str, query: Dict[str, List[str]], body: dict,
-             cookies: Dict[str, str], client: str) -> Result:
+def dispatch(method: str, path: str, query: Dict[str, List[str]], body: dict, client: str) -> Result:
     path = "/" + path.strip("/")
     bucket = path.split("/")[2] if path.count("/") >= 2 else "default"
     wait = rate_limited(bucket if method == "POST" else "default", client)   # strict limits only on actions
@@ -247,16 +245,6 @@ def dispatch(method: str, path: str, query: Dict[str, List[str]], body: dict,
             return 200, run_demo(demo, params, record=bool(body.get("record", True))), out
         if path == "/api/playground" and method == "POST":
             return 200, playground(body.get("initial", 1), body.get("actions")), out
-        if path == "/api/auth":
-            if method == "GET":
-                return 200, accounts.auth_status(cookies, out), out
-            if method == "POST":
-                return 200, accounts.auth_action(body, cookies, out), out
-        if path == "/api/account":
-            if method == "GET":
-                return 200, accounts.account_get(cookies, out), out
-            if method == "POST":
-                return 200, accounts.account_action(body, cookies, out), out
         if path == "/api/errors" and method == "POST":
             def clip(key: str, n: int) -> str:
                 return str(body.get(key) or "")[:n]
@@ -264,14 +252,13 @@ def dispatch(method: str, path: str, query: Dict[str, List[str]], body: dict,
                             line=clip("line", 10), view=clip("view", 40))
             return 200, {"ok": True, "ref": ref}, out
         return 404, {"error": "There is nothing at this address."}, out
-    except accounts.AccountError as exc:
-        return exc.code, {"error": exc.message}, out
+    except ValueError as exc:
+        return 400, {"error": str(exc)}, out
 
 
 # ----------------------------------------------------------------------
 # HTTP handler (Vercel's Python runtime and server.py both use this class)
 # ----------------------------------------------------------------------
-from http.cookies import SimpleCookie  # noqa: E402
 from http.server import BaseHTTPRequestHandler  # noqa: E402
 from urllib.parse import parse_qs, urlparse  # noqa: E402
 
@@ -288,12 +275,9 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        for line in extra or []:              # session cookies, or "Header: value" lines
-            if line.startswith((accounts.ACCESS_COOKIE + "=", accounts.REFRESH_COOKIE + "=")):
-                self.send_header("Set-Cookie", line)
-            else:
-                name, _, value = line.partition(": ")
-                self.send_header(name, value)
+        for line in extra or []:              # extra "Header: value" lines, e.g. Retry-After
+            name, _, value = line.partition(": ")
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -304,13 +288,6 @@ class ApiHandler(BaseHTTPRequestHandler):
         fwd = self.headers.get("X-Forwarded-For") or self.headers.get("X-Real-IP") or ""
         return fwd.split(",")[0].strip() or self.client_address[0]
 
-    def _cookies(self) -> Dict[str, str]:
-        jar = SimpleCookie()
-        try:
-            jar.load(self.headers.get("Cookie") or "")
-        except Exception:
-            return {}
-        return {k: m.value for k, m in jar.items()}
 
     def _same_origin(self) -> bool:
         origin = self.headers.get("Origin")
@@ -337,7 +314,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict):
                     return self._json(400, {"error": "The request must be a JSON object."})
             code, payload, extra = dispatch(method, url.path, parse_qs(url.query), body,
-                                            self._cookies(), client_key(self._client_ip()))
+                                            client_key(self._client_ip()))
             self._json(code, payload, extra)
         except Exception:
             ref = log_event("server_error", path=url.path, trace=traceback.format_exc(limit=8))
