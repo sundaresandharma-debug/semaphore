@@ -4,7 +4,6 @@ Entry point of the Semaphore Synchronization Project (command-line version).
     python main.py              interactive menu
     python main.py --all        run all four demos, exit code 0 if all pass
     python main.py --demo 2     run one demo (1-4)
-    python main.py --tests      run the automated unit tests
 
 For the browser version run:  python server.py
 """
@@ -14,7 +13,6 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-import unittest
 from pathlib import Path
 from typing import List
 
@@ -33,7 +31,6 @@ MENU = """
 3. Readers-Writers
 4. Dining Philosophers
 5. Run All Demonstrations
-6. Run Automated Tests
 0. Exit
 """
 
@@ -82,13 +79,6 @@ def run_all(quiet: bool = False) -> List[DemoResult]:
     return results
 
 
-def run_tests() -> bool:
-    banner("AUTOMATED TESTS (unittest)")
-    suite = unittest.TestLoader().discover(str(ROOT / "tests"), top_level_dir=str(ROOT))
-    outcome = unittest.TextTestRunner(verbosity=2, stream=sys.stdout).run(suite)
-    return outcome.wasSuccessful()
-
-
 def interactive() -> int:
     while True:
         print(MENU)
@@ -104,10 +94,8 @@ def interactive() -> int:
             run_demo(int(choice) - 1)
         elif choice == "5":
             run_all()
-        elif choice == "6":
-            run_tests()
         else:
-            print(f"\n  '{choice}' is not a valid choice - please enter 0-6.")
+            print(f"\n  '{choice}' is not a valid choice - please enter 0-5.")
             continue
         try:
             input("\nPress Enter to return to the menu...")
@@ -119,7 +107,6 @@ def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Semaphore synchronization project")
     parser.add_argument("--all", action="store_true", help="run all demos non-interactively")
     parser.add_argument("--demo", type=int, choices=[1, 2, 3, 4], help="run one demo")
-    parser.add_argument("--tests", action="store_true", help="run the unit tests")
     parser.add_argument("--quiet", action="store_true", help="hide the live event lines")
     args = parser.parse_args(argv)
 
@@ -130,8 +117,6 @@ def main(argv: List[str] | None = None) -> int:
         return 0 if ok else 1
     if args.demo:
         return 0 if run_demo(args.demo - 1, quiet=args.quiet).passed else 1
-    if args.tests:
-        return 0 if run_tests() else 1
     return interactive()
 
 

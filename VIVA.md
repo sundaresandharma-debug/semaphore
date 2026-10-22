@@ -17,7 +17,7 @@ A race condition is when the result depends on how threads happen to interleave.
 No busy-waiting: a blocked thread sleeps on its own `threading.Event`; there are no loops and no `sleep` calls inside the semaphore. No lost wake-up: a thread decides to sleep and joins the queue inside the *same* critical section (the same lock hold), so a `signal()` either comes before (and `wait()` finds a permit) or after (and the thread is already queued and is woken). There is no gap between "I will sleep" and "I can be woken". Also, `Event.set()` is remembered, so a signal that arrives before the thread reaches `event.wait()` is not lost.
 
 **5. Why does `signal()` hand the permit directly to the first waiter instead of just incrementing the counter?**
-If `signal()` only incremented the counter, a brand-new thread calling `wait()` could grab the permit before the sleeping thread wakes up (barging). The waiter would wake, find nothing, and have to queue again, possibly forever (starvation) and out of order. With direct hand-off the counter stays at 0, a newcomer finds no permit and queues behind, and the permit belongs to the waiter from the instant of `signal()`. That also gives strict FIFO order, which a unit test checks.
+If `signal()` only incremented the counter, a brand-new thread calling `wait()` could grab the permit before the sleeping thread wakes up (barging). The waiter would wake, find nothing, and have to queue again, possibly forever (starvation) and out of order. With direct hand-off the counter stays at 0, a newcomer finds no permit and queues behind, and the permit belongs to the waiter from the instant of `signal()`. That also gives strict FIFO order, which the Playground shows: the permit always goes to the thread at the front of the queue.
 
 **6. In Producer-Consumer, why three semaphores, and why must `empty`/`full` be waited on before `mutex`?**
 `empty` counts free slots (producers wait on it), `full` counts filled slots (consumers wait on it), `mutex` lets only one thread touch the buffer at a time. If a producer took `mutex` first and then waited on `empty` while the buffer was full, it would sleep *holding the mutex*; the consumers that would free a slot need that mutex, so nobody can ever continue: deadlock. Waiting on `empty`/`full` first means a thread only enters the critical section when it is guaranteed to finish quickly.
@@ -31,8 +31,8 @@ Mutual exclusion, hold-and-wait, no pre-emption, circular wait. If all five phil
 **9. Do threads and processes share memory? Does your semaphore work between processes? What does the GIL change?**
 Threads of one process share memory; separate processes do not. My semaphore stores its counter and queue in ordinary Python objects, so it synchronizes *threads* of one program, not separate processes; for processes you would use `multiprocessing.Semaphore`, OS named semaphores, or shared memory. The GIL lets only one thread execute Python bytecode at a time, but it can switch threads between the bytecodes of `counter += 1`, so it does not make that statement safe; Demo 1 proves it.
 
-**10. How did you test it, and how do you know there are no lost wake-ups?**
-47 `unittest` tests: initial values, blocking and waking, one signal wakes exactly one thread, no barging, FIFO order, timeouts racing with signals (permits issued = permits received + left over), a 2000-round ping-pong where one lost wake-up would hang the test, mutual exclusion under load, a 150-thread stress test, and the demos' own invariant checks. Tests wait for "blocked" using the semaphore's `waiting` counter instead of guessing with sleeps, every wait has a timeout, and the cleanup aborts all semaphores so a failing test cannot hang. I also injected four deliberate bugs into a copy of the semaphore and the tests caught each one, and I repeated the semaphore tests 25 times with no failure. Tests cannot *prove* the absence of every possible bug; the argument for correctness is the invariants plus the single critical section described in question 4.
+**10. How do you know it works, and that there are no lost wake-ups?**
+Every demonstration checks its own results after the threads finish and reports PASS, FAIL or DEADLOCK: the protected counter must equal threads x increments, the buffer must never exceed its capacity and every item must be consumed exactly once, no reader may overlap a writer and no reader may see a half-written value, and every philosopher must eat with both forks without deadlock. The semaphores must also end at their initial values. For lost wake-ups the argument is structural: a thread joins the queue in the same locked section in which it saw the value 0, and `Event.set()` is remembered, so there is no moment in which a signal can be missed. Checks cannot *prove* the absence of every possible bug; the argument for correctness is the invariants plus the single critical section described in question 4.
 
 ### Extra questions examiners like
 
@@ -46,11 +46,11 @@ Threads of one process share memory; separate processes do not. My semaphore sto
 
 1. **The problem.** Two threads, one counter, wrong answer. Why the operating system needs a synchronization primitive.
 2. **What a semaphore is.** A counter plus a queue. The two rules of `wait()` and `signal()` in one sentence each.
-3. **My implementation.** Built from `Lock` + `Event` only. State, invariants, direct hand-off, FIFO, no busy-waiting, timeouts, `abort()`. Show the comment block in `src/semaphore.py` (Source code page).
+3. **My implementation.** Built from `Lock` + `Event` only. State, invariants, direct hand-off, FIFO, no busy-waiting, timeouts, `abort()`. Show the comment block at the top of `src/semaphore.py`.
 4. **Demo 1: race condition.** Live: different wrong totals without the semaphore, exact total with it.
 5. **Demo 2 and 3: Producer-Consumer, Readers-Writers.** Live: red "blocked" threads, the buffer filling, several readers at once, a lone writer, 0 violations. Mention reader preference and starvation.
 6. **Demo 4: Dining Philosophers.** Live: success with the room semaphore, then untick it and show the deadlock and the watchdog.
-7. **Testing.** 47 tests, 2000-round ping-pong, 150-thread stress, deliberate-bug check, repeated runs. Show the Unit tests page all green.
+7. **Verification.** Each demonstration checks its own invariants and reports PASS, FAIL or DEADLOCK. Show the Verification panel and the Overview after Run all.
 8. **Limits and future work.** Threads not processes, Python-level (not kernel) semaphore, reader preference. Next steps: multi-process version, fair readers-writers, monitors.
 
 ## Live demonstration script (browser version)
@@ -59,20 +59,19 @@ Open the Vercel link, or start `python server.py` **before** the evaluation and 
 
 | Step | Do this | Say this |
 | --- | --- | --- |
-| 1 | **Overview**, press *Run all four demonstrations* | "One click runs the four demonstrations and the unit tests against the real Python code. Everything is verified automatically." |
+| 1 | **Overview**, press *Run all four demonstrations* | "One click runs the four demonstrations against the real Python code. Each one verifies its own results automatically." |
 | 2 | **Race condition**, Run (a few seconds) | "Left: no semaphore, a different wrong total every run. Right: with a BinarySemaphore, exactly the expected number." |
 | 3 | Open `src/semaphore.py` in your editor | "This is the algorithm: lock-protected counter, FIFO queue, one Event per sleeping thread, direct hand-off." |
 | 4 | **Producer-consumer**, Run | "Red means blocked. Producers sleep when `empty` reaches 0, consumers when `full` reaches 0. Every item is consumed once." |
 | 5 | **Readers-writers**, Run | "Many readers together, but the writer always alone. Zero violations. This version favours readers, so writers can starve." |
 | 6 | **Dining philosophers**, Run, then untick the room and Run again | "With the room, nobody deadlocks. Without it, all five hold one fork and wait. The watchdog detects it instead of hanging." |
 | 7 | **Playground**: A wait(), B wait(), C wait(), then A signal() | "A holds the permit, B and C queue in order. When A signals, the permit goes straight to B and the counter stays at zero." |
-| 8 | **Unit tests**, Run | "47 tests, each with a one-line description of what it verifies." |
 
 If the browser misbehaves, the terminal version shows the same results: `python main.py`, then option 5.
 
 ## Before the evaluation
 
-* Run `python -m unittest discover -s tests -v` and `python server.py` once on the computer you will present on.
+* Run `python main.py --all` and `python server.py` once on the computer you will present on.
 * If port 8000 is busy, the server picks the next free port and prints the address; use the one printed.
 * Increase the browser zoom (Ctrl and +) so the back row can read the gauges.
 * Record a screen video of one complete run as a backup.

@@ -18,7 +18,6 @@ import sys
 import threading
 import time
 import traceback
-import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -51,53 +50,6 @@ def demo_metadata() -> List[dict]:
         out.append({"id": demo.ID, "title": demo.TITLE, "description": demo.DESCRIPTION,
                     "watch_for": demo.WATCH_FOR, "params": params})
     return out
-
-
-# ----------------------------------------------------------------------
-# Unit tests
-# ----------------------------------------------------------------------
-class _Collector(unittest.TestResult):
-    """Collects one row per test (name, what it verifies, outcome)."""
-
-    def __init__(self):
-        super().__init__()
-        self.rows: List[dict] = []
-
-    def _row(self, test, status: str, detail: str = "") -> None:
-        cls, _, name = test.id().rpartition(".")
-        self.rows.append({"cls": cls.split(".")[-1], "name": name, "status": status,
-                          "doc": (test.shortDescription() or "").strip(), "detail": detail})
-
-    def addSuccess(self, test):
-        super().addSuccess(test)
-        self._row(test, "ok")
-
-    def addFailure(self, test, err):
-        super().addFailure(test, err)
-        self._row(test, "FAIL", self._exc_info_to_string(err, test))
-
-    def addError(self, test, err):
-        super().addError(test, err)
-        self._row(test, "ERROR", self._exc_info_to_string(err, test))
-
-    def addSubTest(self, test, subtest, err):
-        super().addSubTest(test, subtest, err)
-        if err is not None:
-            self.rows.append({"cls": test.id().split(".")[-2], "name": test.id().split(".")[-1],
-                              "status": "FAIL", "doc": str(subtest),
-                              "detail": self._exc_info_to_string(err, test)})
-
-
-def run_unit_tests() -> dict:
-    suite = unittest.TestLoader().discover(str(ROOT / "tests"), top_level_dir=str(ROOT))
-    collector = _Collector()
-    started = time.monotonic()
-    suite.run(collector)
-    failed = sum(r["status"] == "FAIL" for r in collector.rows)
-    errors = sum(r["status"] == "ERROR" for r in collector.rows)
-    return {"ok": collector.wasSuccessful(), "total": collector.testsRun, "failed": failed,
-            "errors": errors, "passed": collector.testsRun - failed - errors,
-            "duration": round(time.monotonic() - started, 2), "rows": collector.rows}
 
 
 # ----------------------------------------------------------------------
@@ -288,8 +240,6 @@ def dispatch(method: str, path: str, query: Dict[str, List[str]], body: dict,
         if path == "/api/catalog" and method == "GET":
             return 200, demo_metadata(), out
         if path == "/api/run" and method == "POST":
-            if body.get("kind") == "tests":
-                return 200, run_unit_tests(), out
             demo = str(body.get("demo"))
             if demo not in DEMOS_BY_ID:
                 return 400, {"error": "Unknown demonstration."}, out

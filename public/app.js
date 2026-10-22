@@ -219,7 +219,6 @@ const NAV = [
   {id: 'readers_writers', label: 'Readers-writers'},
   {id: 'dining_philosophers', label: 'Dining philosophers'},
   {id: 'playground', label: 'Playground', gap: true},
-  {id: 'tests', label: 'Unit tests'},
   {id: 'account', label: 'Account', gap: true},
 ];
 
@@ -468,7 +467,6 @@ const ICON = {
   producer_consumer: '<rect x="2" y="9" width="5" height="6"/><rect x="9.5" y="9" width="5" height="6"/><rect x="17" y="9" width="5" height="6"/><rect x="1" y="5" width="22" height="1.6"/><rect x="1" y="17.4" width="22" height="1.6"/>',
   readers_writers: '<rect x="3" y="3" width="12" height="18"/><rect x="17" y="3" width="4" height="12"/><path d="M17 16h4l-2 4z"/>',
   dining_philosophers: '<circle cx="12" cy="12.5" r="5"/><circle cx="12" cy="3" r="2"/><circle cx="21" cy="9.5" r="2"/><circle cx="17.5" cy="21" r="2"/><circle cx="6.5" cy="21" r="2"/><circle cx="3" cy="9.5" r="2"/>',
-  tests: '<rect x="3" y="4" width="4" height="4"/><rect x="9" y="5" width="12" height="2"/><rect x="3" y="10" width="4" height="4"/><rect x="9" y="11" width="12" height="2"/><rect x="3" y="16" width="4" height="4"/><rect x="9" y="17" width="12" height="2"/>',
 };
 const icon = id => `<svg class="ico" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">${ICON[id] || ''}</svg>`;
 const SHORT = {
@@ -491,10 +489,9 @@ function buildOverview() {
   const rows = App.demos.map(d => `<tr data-row="${d.id}"><td><button class="dname linklike" data-open="${d.id}">${icon(d.id)}${esc(d.title)}</button></td><td><span class="badge" data-k="b">Not run</span></td><td data-k="t">-</td><td data-k="f" class="muted">${esc(SHORT[d.id] || '')}</td></tr>`).join('');
   sec.innerHTML = `<header class="vhead"><h2>Semaphores, built from scratch</h2>
     <p class="lede">A semaphore is a counter that decides how many threads may enter a piece of code at once. This project builds one in Python from just a lock and an event, then proves it works on four classic synchronization problems.</p></header>
-    <div class="hero-actions"><button class="btn primary big" id="runAll">Run all four demonstrations and the tests</button></div>
+    <div class="hero-actions"><button class="btn primary big" id="runAll">Run all four demonstrations</button></div>
     <p class="hint">This uses quick settings so it finishes in a few seconds. Open a demonstration for the slower, animated version.</p>
-    <table class="summary"><thead><tr><th>Demonstration</th><th>Result</th><th>Time</th><th>What was verified</th></tr></thead><tbody>${rows}
-      <tr data-row="tests"><td><button class="dname linklike" data-open="tests">${icon('tests')}Unit tests</button></td><td><span class="badge" data-k="b">Not run</span></td><td data-k="t">-</td><td data-k="f" class="muted">Automated tests of the semaphore itself.</td></tr></tbody></table>
+    <table class="summary"><thead><tr><th>Demonstration</th><th>Result</th><th>Time</th><th>What was verified</th></tr></thead><tbody>${rows}</tbody></table>
     <p class="overall" id="overall" aria-live="polite"></p>
     <aside class="howto"><h3>How this site works</h3>
       <p>Every button runs the project's real Python code on the server: the custom <code>Semaphore</code> class and real threads. A demonstration runs to completion on the server while the semaphores are sampled every 0.1 s. The page then animates those samples at the speed the threads actually ran. Nothing in the animation is simulated in the browser.</p></aside>
@@ -517,21 +514,8 @@ const BADGE = {PASS: ['pass', 'Passed'], FAIL: ['fail', 'Failed'], DEADLOCK: ['d
 
 async function runToEnd(body) {
   const d = await post('/api/run', {...body, record: false});
-  if (body.kind === 'tests') return d;
   if (d.error) throw new Error(d.error);
   return d.result;
-}
-
-async function runTestsOverview() {
-  const btns = $$('#runAll'); btns.forEach(b => b.disabled = true);
-  rowSet('tests', 'running', 'Running', '-', 'Running the unit tests...');
-  try {
-    const r = await runToEnd({kind: 'tests'});
-    rowSet('tests', r.ok ? 'pass' : 'fail', r.ok ? 'Passed' : 'Failed', r.duration.toFixed(1) + ' s', `${r.passed} of ${r.total} tests passed${r.failed + r.errors ? `, ${r.failed + r.errors} failed` : ''}.`);
-    Tests.render(r);
-    return r;
-  } catch (e) { rowSet('tests', 'fail', 'Error', '-', e.message); }
-  finally { btns.forEach(b => b.disabled = false); }
 }
 
 async function runAll() {
@@ -548,9 +532,7 @@ async function runAll() {
     }
   } catch (e) { $('#overall').textContent = 'Error: ' + e.message; btns.forEach(b => b.disabled = false); return; }
   btns.forEach(b => b.disabled = false);
-  const t = await runTestsOverview();
-  const n = App.demos.length;
-  $('#overall').textContent = `${passed} of ${n} demonstrations passed` + (t ? `, ${t.passed} of ${t.total} unit tests passed.` : '.');
+  $('#overall').textContent = `${passed} of ${App.demos.length} demonstrations passed.`;
 }
 
 /* ------------------------------- playground ------------------------------- */
@@ -608,43 +590,12 @@ const Playground = {
   }
 };
 
-/* --------------------------------- tests --------------------------------- */
-const Tests = {
-  build() {
-    const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'view-tests';
-    sec.innerHTML = `<header class="vhead"><h2>Unit tests</h2><p class="lede">The automated tests of the semaphore and of the four demonstrations. Each line says what behaviour it verifies.</p></header>
-      <div class="hero-actions"><button class="btn primary" id="tRun">Run unit tests</button></div>
-      <div class="tprog" aria-hidden="true"><i id="tBar"></i></div><p class="overall" id="tSum" aria-live="polite"></p>
-      <div id="tList"><div class="empty-state"><p><b>No test results yet.</b></p><p class="muted">Press <i>Run unit tests</i> to run all 47 tests on the server. It takes about five seconds.</p></div></div>`;
-    $('#main').appendChild(sec);
-    $('#tRun').addEventListener('click', async () => {
-      const btn = $('#tRun'); btn.disabled = true; $('#tSum').textContent = 'Running the test suite on the server...'; $('#tSum').style.color = ''; $('#tList').innerHTML = `<div aria-busy="true" aria-label="Running tests">${'<div class="skel skel-row"></div>'.repeat(6)}</div>`;
-      $('#tBar').style.width = '0'; $('.tprog').classList.add('busy');
-      try {
-        this.render(await runToEnd({kind: 'tests'}));
-      } catch (e) { $('#tSum').textContent = 'Error: ' + e.message; $('#tSum').style.color = 'var(--stop)'; }
-      finally { btn.disabled = false; $('.tprog').classList.remove('busy'); }
-    });
-  },
-  render(r) {
-    $('.tprog').classList.remove('busy');
-    $('#tBar').style.width = '100%';
-    const sum = $('#tSum');
-    sum.textContent = r.ok ? `All ${r.total} tests passed in ${r.duration.toFixed(1)} s.` : `${r.failed + r.errors} of ${r.total} tests failed.`;
-    sum.style.color = r.ok ? 'var(--clear)' : 'var(--stop)';
-    const groups = {};
-    r.rows.forEach(t => (groups[t.cls] = groups[t.cls] || []).push(t));
-    $('#tList').innerHTML = Object.entries(groups).sort().map(([cls, rows]) => `<div class="tgroup"><h3>${esc(cls)}</h3>${rows.sort((a, b) => a.name.localeCompare(b.name)).map(t =>
-      `<div class="trow ${t.status === 'ok' ? 'ok' : 'bad'}"><span class="tag">${t.status === 'ok' ? 'Pass' : 'Fail'}</span><span><code>${esc(t.name)}</code><span class="doc">${esc(t.doc)}</span>${t.detail ? `<pre>${esc(t.detail)}</pre>` : ''}</span></div>`).join('')}</div>`).join('');
-  }
-};
-
 /* -------------------------------- account -------------------------------- */
 const Account = {
   mode: 'signin', notice: '', recovery: null, runs: null, loadingRuns: false,
   build() {
     const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'view-account';
-    sec.innerHTML = `<header class="vhead"><h2 tabindex="-1">Account</h2><p class="lede">An account is optional. It only lets you keep demonstration results you choose to save. Every demonstration, the Playground and the tests work without one.</p></header>
+    sec.innerHTML = `<header class="vhead"><h2 tabindex="-1">Account</h2><p class="lede">An account is optional. It only lets you keep demonstration results you choose to save. Every demonstration and the Playground work without one.</p></header>
       <div id="acct" aria-live="polite"></div>`;
     $('#main').appendChild(sec);
     sec.addEventListener('click', e => this.onClick(e));
@@ -938,7 +889,7 @@ async function boot() {
   setupTheme();
   buildOverview();
   App.demos.forEach(buildDemoView);
-  Playground.build(); Tests.build(); Account.build();
+  Playground.build(); Account.build();
   setUser(auth.user || null);
   const fromEmail = await handleAuthLink();
   window.addEventListener('popstate', async () => {

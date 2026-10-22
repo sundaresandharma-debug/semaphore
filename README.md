@@ -3,7 +3,7 @@
 An Operating Systems project: a counting semaphore and a binary semaphore written
 from scratch in Python (built only on `threading.Lock` and `threading.Event`),
 used to solve four classic synchronization problems, with a command-line menu, a
-browser interface, and an automated test suite.
+and a browser interface.
 
 ```
 Python 3.9+   |   standard library only   |   no pip install needed
@@ -18,10 +18,9 @@ project folder, the one that contains `main.py`.
 python --version                           # must say 3.9 or newer
 python server.py                           # browser version  -> http://localhost:8000
 python main.py                             # terminal menu version
-python -m unittest discover -s tests -v    # automated tests
 ```
 
-If `python` is not recognised on Windows, use the Python launcher instead: `py server.py`, `py main.py`, `py -m unittest discover -s tests -v`.
+If `python` is not recognised on Windows, use the Python launcher instead: `py server.py`, `py main.py`.
 
 ## 1. Problem statement
 
@@ -39,7 +38,7 @@ they may continue**. That primitive is the semaphore (Dijkstra, 1965).
 3. Demonstrate a race condition and remove it with a semaphore.
 4. Solve Producer-Consumer, Readers-Writers and Dining Philosophers with the custom semaphore.
 5. Detect synchronization failures (violations, deadlock) instead of hanging.
-6. Prove the behaviour with repeatable automated tests.
+6. Have every demonstration verify its own results and report PASS, FAIL or DEADLOCK.
 
 ## 3. Operating Systems concepts covered
 
@@ -65,7 +64,7 @@ my-semaphore-project/
 ├── api/                      Vercel serverless functions (thin wrappers around webcore.py)
 │   ├── catalog.py            GET  /api/catalog     list of demos and their settings
 │   ├── playground.py         POST /api/playground  replay wait()/signal() clicks on a real Semaphore
-│   ├── run.py                POST /api/run         run a demo (or the unit tests) to completion
+│   ├── run.py                POST /api/run         run a demo to completion
 │   ├── auth.py               /api/auth             sign up, sign in, sign out, password reset
 │   ├── account.py            /api/account          saved results, delete account
 │   └── errors.py             POST /api/errors      browser error reports (only with consent)
@@ -88,10 +87,6 @@ my-semaphore-project/
 │   ├── producer_consumer.py
 │   ├── readers_writers.py
 │   └── dining_philosophers.py
-├── tests/
-│   ├── __init__.py
-│   ├── test_semaphore.py     36 tests of the semaphore itself
-│   └── test_demos.py         11 tests: every demo verifies its own invariants
 ├── main.py                   command-line entry point (interactive menu)
 ├── server.py                 run the web interface locally (same API as Vercel)
 ├── webcore.py                the web API: shared by api/*.py and server.py
@@ -160,7 +155,7 @@ signal():
 * **No busy-waiting.** Blocked threads sleep on an `Event`. There are no polling loops and no `sleep` calls inside the semaphore.
 * **Timeouts.** `wait(timeout=t)` returns `False` if time runs out. The timed-out thread removes itself from the queue under the lock, but first checks whether a `signal()` granted it a permit in the meantime (in that case the timeout is ignored). A permit is never lost and never handed to a thread that gave up.
 * **`BinarySemaphore`.** Initial value must be 0 or 1. A `signal()` on a free binary semaphore with nobody waiting raises `SemaphoreOverflowError` instead of silently creating a second permit: a double release would break mutual exclusion, so the bug is made loud.
-* **`abort()`.** Wakes every blocked thread with `SemaphoreAborted`. Used by the watchdog and by the tests so that no thread can ever be left sleeping forever.
+* **`abort()`.** Wakes every blocked thread with `SemaphoreAborted`. Used by the watchdog and when a run is cancelled, so that no thread can ever be left sleeping forever.
 * **Other API:** `value` and `waiting` (read-only properties), `try_wait()`, context-manager support (`with sem:`), `ValueError`/`TypeError` for invalid arguments.
 
 ## 7. The four demonstrations
@@ -185,7 +180,7 @@ python server.py
 
 The terminal prints `Open: http://localhost:8000` and your browser opens by itself. If it does not, open that address manually. Press **Ctrl+C** in the terminal to stop. Options: `--port 9000` (another port; if 8000 is busy the next free port is used automatically) and `--no-browser`.
 
-Pages: **Overview** (run all four demos and the tests with one button), one page per demonstration (change the settings, press Run, watch the semaphores, see the verification checklist), **Playground** (operate a real semaphore by hand), **Unit tests**, and an optional **Account** page.
+Pages: **Overview** (run all four demos with one button), one page per demonstration (change the settings, press Run, watch the semaphores, see the verification checklist), **Playground** (operate a real semaphore by hand), and an optional **Account** page.
 
 On each demonstration page: **Run** uses your settings, **Quick run** uses fast settings and shows the result in a second or two, **Reset to defaults** restores the settings, and an estimate of the run time appears under the settings (with a warning if the run would pass the 50-second server limit). After a run you can change the **replay speed** (0.5× to 4×) and press **Replay again** to watch the same run without running it again. The **Theme** button in the sidebar switches between automatic, light and dark colours.
 
@@ -217,7 +212,6 @@ function. A demo run is limited to 50 seconds (the functions allow 60).
 python main.py                  # interactive menu 0-6
 python main.py --all            # all demos, exit code 0 if all pass
 python main.py --demo 4         # one demo (1-4)
-python main.py --tests          # unit tests
 ```
 
 ### In Antigravity, VS Code or any editor
@@ -228,24 +222,7 @@ Open the project folder in the editor, open its integrated terminal, and run `py
 
 The page needs the Python backend to run the semaphores. Opened as a plain file it shows a message telling you to start `python server.py`.
 
-## 9. Automated tests
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-Run it from the project folder (the one containing `main.py`). It runs **47 tests** in about 3 to 4 seconds.
-
-* `tests/test_semaphore.py` (36 tests): initial values, taking available permits, blocking, waking, one signal wakes one thread, no barging, FIFO order, competing threads, no lost wake-ups (2000-round ping-pong), timeouts racing with signals, abort, binary semaphore validation and overflow, context manager, invalid arguments, a shared counter under load (24,000 increments), mutual exclusion, a 150-thread stress test, and a check that `semaphore.py` does not use any built-in semaphore.
-* `tests/test_demos.py` (11 tests): each demonstration passes its own verification, blocking really happens, a deadlock is detected without the room semaphore, cancellation works, and parameters are validated.
-
-Every test has a one-line description of the behaviour it verifies (shown with `-v`, and in the **Unit tests** page of the browser version).
-
-**Tests cannot hang.** Waiting for "a thread is blocked" uses the semaphore's own `waiting` counter, not guesses with `sleep`; every wait has a timeout; every worker thread is a daemon thread; and `tearDown` aborts all semaphores (waking any thread still blocked) and then checks that every thread has ended.
-
-**Do the tests catch bugs?** Four deliberate bugs were injected into a copy of `semaphore.py` (wake the newest waiter instead of the oldest, increment the counter as well as waking a waiter, remove the binary overflow check, leave a timed-out waiter in the queue). Each one made tests fail.
-
-## 10. Actual output
+## 9. Actual output
 
 Everything in this section was **captured from real runs** while this project was built (Linux, Python 3.13). Timings and the unprotected counter values will be different on your computer; that is expected.
 
@@ -344,15 +321,6 @@ All demonstrations, `python main.py --all --quiet`:
   Total time: 2.3s
 ```
 
-Unit tests, `python -m unittest discover -s tests`:
-
-```text
-----------------------------------------------------------------------
-Ran 47 tests in 3.231s
-
-OK
-```
-
 The terminal menu looks like this (literal layout, not captured output):
 
 ```text
@@ -365,13 +333,12 @@ The terminal menu looks like this (literal layout, not captured output):
 3. Readers-Writers
 4. Dining Philosophers
 5. Run All Demonstrations
-6. Run Automated Tests
 0. Exit
 
 Enter your choice:
 ```
 
-## 11. Threads versus processes
+## 10. Threads versus processes
 
 Python **threads** inside one program **share memory**, and this semaphore coordinates exactly such threads: its counter and queue are ordinary Python objects protected by a `threading.Lock`.
 
@@ -379,18 +346,17 @@ Separate operating-system **processes** do **not** share memory. A `Semaphore` o
 
 A note on the GIL: CPython's global interpreter lock lets only one thread run Python bytecode at a time, but it can switch threads **between** the bytecodes of `counter += 1`. The GIL therefore does not make `counter += 1` safe. The race condition demo shows exactly that.
 
-## 12. Known limitations
+## 11. Known limitations
 
 * **Threads, not processes** (see section 11).
 * **Python-level semaphore.** It is built from `Lock` and `Event`, which themselves rely on the operating system. A kernel semaphore (futex-based) is faster; this project optimises for clarity and correctness.
 * **The race window is widened on purpose.** CPython switches threads only every few milliseconds, and the READ-WRITE gap is a few nanoseconds wide, so on its own the race would appear rarely. The race demo therefore makes a thread give up the CPU between its READ and its WRITE with a small random probability (`PREEMPT_CHANCE` in `race_condition.py`). This models "the scheduler may interrupt here". The protected run uses the same interruption and is still exact. The actual numbers of lost updates depend on this setting and on your computer.
 * **Demo pauses are simulated work.** Thinking, eating, reading and producing use short sleeps to model time passing. They are never used to make synchronization correct.
 * **Readers-Writers prefers readers**, so writers can starve. A writers-preference or fair version is a possible extension.
-* **Some tests rely on bounded timing** (timeouts of a few seconds, and short polling of `waiting`). They passed 25 repeated runs, 5 consecutive full runs and 3 runs under heavy CPU load, but an extremely overloaded machine could in theory time out.
 * **Not run on Windows** by the author of this build (see section 4).
 * **The browser replays a sampled recording.** Each run is executed to completion on the server while the state is sampled every 0.1 s, then animated in the browser. Very short states between two samples may not be visible, and the animation starts only after the run has finished.
 
-## 13. Future enhancements
+## 12. Future enhancements
 
 * A multi-process version using `multiprocessing` shared memory with OS-level semaphores, to compare with the thread version.
 * Writers-preference and fair (no starvation) readers-writers locks.

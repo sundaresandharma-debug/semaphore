@@ -260,7 +260,7 @@ class Semaphore:
     def abort(self) -> None:
         """Wake every blocked thread with SemaphoreAborted and kill the semaphore.
 
-        Lets a watchdog (or a failing unit test) tear down worker threads that
+        Lets a watchdog (or a cancelled demonstration) tear down worker threads that
         would otherwise sleep forever.  Idempotent.
         """
         with self._lock:
